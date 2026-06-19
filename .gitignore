@@ -71,3 +71,4 @@ android/key.properties
 # Symbolication / obfuscation
 app.*.symbols
 app.*.map.json
+

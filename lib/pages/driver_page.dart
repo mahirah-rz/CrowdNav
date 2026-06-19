@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import '../services/supabase_service.dart';
 import '../models/user_model.dart';
 import '../auth/login_page.dart';
+import 'profile_page.dart';
 
 class DriverPage extends StatefulWidget {
   const DriverPage({super.key});
@@ -97,7 +98,7 @@ class _DriverPageState extends State<DriverPage> {
 
     try {
       final firstPosition = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
+        desiredAccuracy: LocationAccuracy.high,
       );
       if (mounted) {
         setState(() => _currentPosition = firstPosition);
@@ -107,19 +108,17 @@ class _DriverPageState extends State<DriverPage> {
 
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.medium,
-        distanceFilter: 25,
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
       ),
     ).listen(
       (position) {
         if (mounted) {
           setState(() => _currentPosition = position);
-          try {
-            _mapController.move(
-              LatLng(position.latitude, position.longitude),
-              16,
-            );
-          } catch (_) {}
+          _mapController.move(
+            LatLng(position.latitude, position.longitude),
+            16,
+          );
         }
         _uploadLocation(position);
       },
@@ -133,19 +132,13 @@ class _DriverPageState extends State<DriverPage> {
       },
     );
 
-    _uploadTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+    _uploadTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
       final position = _currentPosition;
-      if (position != null) await _uploadLocation(position, force: true);
+      if (position != null) await _uploadLocation(position);
     });
   }
 
-  Future<void> _uploadLocation(Position position, {bool force = false}) async {
-    final lastUpload = _lastUpload;
-    if (!force && lastUpload != null &&
-        DateTime.now().difference(lastUpload).inSeconds < 20) {
-      return;
-    }
-
+  Future<void> _uploadLocation(Position position) async {
     try {
       await SupabaseService.updateBusLocation(
         busId: _driver?.id ?? 'unknown',
@@ -170,10 +163,18 @@ class _DriverPageState extends State<DriverPage> {
     _uploadTimer = null;
 
     if (_driver != null) {
-      SupabaseService.clearBusLocation(_driver!.id).catchError((_) {});
+      SupabaseService.clearBusLocation(_driver!.id);
     }
 
     if (mounted) setState(() => _isBroadcasting = false);
+  }
+
+  Future<void> _openProfile() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ProfilePage(onProfileUpdated: _loadProfile)),
+    );
+    await _loadProfile();
   }
 
   Future<void> _signOut() async {
@@ -211,6 +212,11 @@ class _DriverPageState extends State<DriverPage> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.account_circle_outlined),
+            tooltip: 'Profile',
+            onPressed: _openProfile,
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
@@ -296,14 +302,18 @@ class _DriverPageState extends State<DriverPage> {
             child: Column(
               children: [
                 CircleAvatar(
-                  radius: 36,
-                  backgroundColor:
-                      const Color(0xFF2ECC71).withOpacity( 0.15),
-                  child: const Icon(
-                    Icons.directions_bus_rounded,
-                    size: 40,
-                    color: Color(0xFF1E8449),
-                  ),
+                  radius: 38,
+                  backgroundColor: const Color(0xFF2ECC71).withOpacity(0.15),
+                  backgroundImage: ((_driver?.avatarUrl ?? '').isNotEmpty)
+                      ? NetworkImage(_driver!.avatarUrl!)
+                      : null,
+                  child: ((_driver?.avatarUrl ?? '').isEmpty)
+                      ? const Icon(
+                          Icons.directions_bus_rounded,
+                          size: 40,
+                          color: Color(0xFF1E8449),
+                        )
+                      : null,
                 ),
                 const SizedBox(height: 14),
                 Text(
@@ -354,7 +364,8 @@ class _DriverPageState extends State<DriverPage> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  value: _selectedRoute,
+                  initialValue: _selectedRoute,
+                  isExpanded: true,
                   decoration: InputDecoration(
                     filled: true,
                     fillColor: const Color(0xFFECF0F1),
@@ -366,8 +377,10 @@ class _DriverPageState extends State<DriverPage> {
                         color: Color(0xFF1E8449)),
                   ),
                   items: _routes
-                      .map((r) =>
-                          DropdownMenuItem(value: r, child: Text(r)))
+                      .map((r) => DropdownMenuItem(
+                            value: r,
+                            child: Text(r, overflow: TextOverflow.ellipsis),
+                          ))
                       .toList(),
                   onChanged: _isBroadcasting
                       ? null
@@ -580,7 +593,7 @@ class _DriverPageState extends State<DriverPage> {
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: DropdownButtonFormField<String>(
-                value: _selectedRoute,
+                initialValue: _selectedRoute,
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: const Color(0xFFECF0F1),

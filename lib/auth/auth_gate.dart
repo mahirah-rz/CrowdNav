@@ -26,7 +26,7 @@ class AuthGate extends StatelessWidget {
           return const LoginPage();
         }
 
-        return FutureBuilder(
+        return FutureBuilder<Map<String, dynamic>?>(
           future: _loadAndSetupUser(),
           builder: (context, profileSnapshot) {
             if (profileSnapshot.connectionState == ConnectionState.waiting) {
@@ -37,16 +37,20 @@ class AuthGate extends StatelessWidget {
               return _AuthErrorScreen(error: profileSnapshot.error.toString());
             }
 
+            final user = Supabase.instance.client.auth.currentUser;
             final profile = profileSnapshot.data;
-            if (profile == null) {
-              final user = Supabase.instance.client.auth.currentUser;
+
+            if (profile == null || !_isProfileComplete(profile)) {
               return CompleteProfilePage(
-                email: user?.email ?? '',
-                name: user?.userMetadata?['full_name'] ?? '',
+                email: user?.email ?? profile?['email']?.toString() ?? '',
+                name: user?.userMetadata?['full_name']?.toString() ??
+                    user?.userMetadata?['name']?.toString() ??
+                    profile?['name']?.toString() ??
+                    '',
               );
             }
 
-            switch (profile.role) {
+            switch ((profile['role'] ?? 'student').toString()) {
               case 'driver':
                 return const DriverPage();
               case 'admin':
@@ -60,18 +64,35 @@ class AuthGate extends StatelessWidget {
     );
   }
 
-  Future<dynamic> _loadAndSetupUser() async {
-    final profile = await SupabaseService.getProfile();
+  Future<Map<String, dynamic>?> _loadAndSetupUser() async {
+    final profile = await SupabaseService.getProfileMap();
 
-    if (profile != null) {
+    if (profile != null && _isProfileComplete(profile)) {
       await NotificationService.saveTokenToSupabase();
       await NotificationService.subscribeUserTopics(
-        department: profile.department.isEmpty ? 'all' : profile.department,
-        program: profile.program.isEmpty ? 'all' : profile.program,
+        department: (profile['department'] ?? '').toString().isEmpty
+            ? 'all'
+            : profile['department'].toString(),
+        program: (profile['program'] ?? '').toString().isEmpty
+            ? 'all'
+            : profile['program'].toString(),
       );
     }
 
     return profile;
+  }
+
+  bool _isProfileComplete(Map<String, dynamic> profile) {
+    final role = (profile['role'] ?? 'student').toString();
+    final name = (profile['name'] ?? '').toString().trim();
+    final phone = (profile['phone'] ?? '').toString().trim();
+    final id = (profile['student_id'] ?? '').toString().trim();
+    final route = (profile['assigned_route'] ?? '').toString().trim();
+
+    if (name.isEmpty || phone.isEmpty) return false;
+    if (role == 'student' && id.isEmpty) return false;
+    if (role == 'driver' && route.isEmpty) return false;
+    return true;
   }
 }
 

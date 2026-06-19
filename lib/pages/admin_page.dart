@@ -8,6 +8,7 @@ import '../services/supabase_service.dart';
 import '../auth/login_page.dart';
 import '../widgets/input_field.dart';
 import 'complaint_detail_page.dart';
+import 'profile_page.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -37,6 +38,14 @@ class _AdminPageState extends State<AdminPage>
   Future<void> _loadAdmin() async {
     final user = await SupabaseService.getProfile();
     if (mounted) setState(() => _admin = user);
+  }
+
+  Future<void> _openProfile() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ProfilePage(onProfileUpdated: _loadAdmin)),
+    );
+    await _loadAdmin();
   }
 
   Future<void> _signOut() async {
@@ -69,6 +78,11 @@ class _AdminPageState extends State<AdminPage>
                 ),
               ),
             ),
+          IconButton(
+            icon: const Icon(Icons.account_circle_outlined),
+            tooltip: 'Profile',
+            onPressed: _openProfile,
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
@@ -219,7 +233,8 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
   Widget _dropdown(String label, String value, List<String> items,
       void Function(String?) onChanged) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
+      isExpanded: true,
       decoration: InputDecoration(
         labelText: label,
         filled: true,
@@ -230,8 +245,11 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
       items: items
           .map((e) => DropdownMenuItem(
               value: e,
-              child: Text(e == 'all' ? 'All' : e,
-                  style: const TextStyle(fontSize: 13))))
+              child: Text(
+                e == 'all' ? 'All' : e,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13),
+              )))
           .toList(),
       onChanged: onChanged,
     );
@@ -280,20 +298,26 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
                         : null,
                   ),
                   const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _dropdown('Department', _targetDept,
-                            _departments,
-                            (v) => setState(() => _targetDept = v!)),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _dropdown('Program', _targetProgram,
-                            _programs,
-                            (v) => setState(() => _targetProgram = v!)),
-                      ),
-                    ],
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final narrow = constraints.maxWidth < 360;
+                      final dept = _dropdown('Department', _targetDept, _departments,
+                          (v) => setState(() => _targetDept = v!));
+                      final program = _dropdown('Program', _targetProgram, _programs,
+                          (v) => setState(() => _targetProgram = v!));
+                      if (narrow) {
+                        return Column(
+                          children: [dept, const SizedBox(height: 10), program],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          Expanded(child: dept),
+                          const SizedBox(width: 10),
+                          Expanded(child: program),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 10),
                   Row(

@@ -1,12 +1,10 @@
-import 'dart:convert';
+import 'dart:io';
 
-import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_model.dart';
 import '../models/announcement_model.dart';
 import '../models/complaint_model.dart';
-import '../config/app_config.dart';
 
 class SupabaseService {
   static final SupabaseClient _client = Supabase.instance.client;
@@ -55,6 +53,37 @@ class SupabaseService {
       ...updates,
       'updated_at': DateTime.now().toIso8601String(),
     }).eq('id', userId);
+  }
+
+
+
+  static Future<String> uploadAvatar(File imageFile) async {
+    final userId = currentUserId;
+    if (userId == null) {
+      throw const AuthException('You must be logged in to upload a profile picture.');
+    }
+
+    final ext = imageFile.path.split('.').last.toLowerCase();
+    final safeExt = ['jpg', 'jpeg', 'png', 'webp'].contains(ext) ? ext : 'jpg';
+    final storagePath = '$userId/avatar_${DateTime.now().millisecondsSinceEpoch}.$safeExt';
+
+    await _client.storage.from('avatars').upload(
+          storagePath,
+          imageFile,
+          fileOptions: FileOptions(
+            cacheControl: '3600',
+            upsert: true,
+            contentType: safeExt == 'png'
+                ? 'image/png'
+                : safeExt == 'webp'
+                    ? 'image/webp'
+                    : 'image/jpeg',
+          ),
+        );
+
+    final publicUrl = _client.storage.from('avatars').getPublicUrl(storagePath);
+    await updateProfile({'avatar_url': publicUrl});
+    return publicUrl;
   }
 
   static Future<void> saveDeviceToken({
@@ -163,42 +192,6 @@ class SupabaseService {
     String targetProgram = 'all',
     String priority = 'normal',
   }) async {
-    if (AppConfig.hasBackend) {
-      final session = _client.auth.currentSession;
-      if (session == null) {
-        throw Exception('You must be logged in to post announcements.');
-      }
-
-      final uri = Uri.parse(
-        '${AppConfig.backendBaseUrl.replaceAll(RegExp(r"/+$"), '')}/announcements/send',
-      );
-
-      final response = await http.post(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${session.accessToken}',
-        },
-        body: jsonEncode({
-          'title': title,
-          'body': body,
-          'target_role': targetRole,
-          'target_department': targetDepartment,
-          'target_program': targetProgram,
-          'priority': priority,
-        }),
-      );
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return;
-      }
-
-      throw Exception(
-        'Backend notification failed (${response.statusCode}): ${response.body}',
-      );
-    }
-
-    // Local/offline fallback: save announcement in Supabase without push sending.
     await _client.from('announcements').insert({
       'title': title,
       'body': body,

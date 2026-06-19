@@ -71,13 +71,20 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
 
-      if (existing == null) {
+      final needsProfile = existing == null ||
+          (existing['name'] ?? '').toString().trim().isEmpty ||
+          (existing['phone'] ?? '').toString().trim().isEmpty ||
+          (existing['student_id'] ?? '').toString().trim().isEmpty;
+
+      if (needsProfile) {
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(
             builder: (_) => CompleteProfilePage(
               email: user.email ?? '',
-              name: user.userMetadata?['full_name'] ?? '',
+              name: user.userMetadata?['full_name']?.toString() ??
+                  user.userMetadata?['name']?.toString() ??
+                  '',
             ),
           ),
           (route) => false,

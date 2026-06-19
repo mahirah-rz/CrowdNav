@@ -12,7 +12,12 @@
           "package_name": "io.crowdnav.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "394906136895-dri4qomlqhdot9e5calae78ulua7ach0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCXgMxSAjf0RIkwwwWre9uFU2WEm2ez3c4"
@@ -20,7 +25,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "394906136895-dri4qomlqhdot9e5calae78ulua7ach0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

@@ -183,7 +183,7 @@ class _SubmitTabState extends State<_SubmitTab> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: _category,
+              initialValue: _category,
               decoration: InputDecoration(
                 labelText: 'Select Category',
                 filled: true,

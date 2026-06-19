@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../auth/login_page.dart';
 import '../services/supabase_service.dart';
@@ -18,6 +21,7 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _loading = true;
   bool _editing = false;
   bool _saving = false;
+  bool _uploadingAvatar = false;
 
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
@@ -60,6 +64,7 @@ class _ProfilePageState extends State<ProfilePage> {
   bool get _needsDepartment => _role == 'student' || _role == 'faculty' || (_role == 'office_staff' || _role == 'office staff');
   bool get _needsProgram => _role == 'student';
   bool get _needsRoute => _role == 'driver';
+  bool get _needsId => _role == 'student';
 
   @override
   void initState() {
@@ -120,19 +125,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  String get _idLabel {
-    switch (_role) {
-      case 'driver':
-        return 'Driver ID';
-      case 'faculty':
-        return 'Faculty ID';
-      case 'office_staff':
-      case 'office staff':
-        return 'Staff ID';
-      default:
-        return 'Student ID';
-    }
-  }
+  String get _idLabel => 'Student ID';
 
   void _enterEditMode() {
     if (_profile != null) _populateControllers(_profile!);
@@ -144,6 +137,38 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _editing = false);
   }
 
+  Future<void> _pickAndUploadAvatar() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 75,
+        maxWidth: 800,
+      );
+      if (picked == null) return;
+
+      setState(() => _uploadingAvatar = true);
+      final url = await SupabaseService.uploadAvatar(File(picked.path));
+      final fresh = await SupabaseService.getProfileMap();
+
+      if (!mounted) return;
+      setState(() {
+        _profile = fresh ?? {...(_profile ?? <String, dynamic>{}), 'avatar_url': url};
+        _uploadingAvatar = false;
+      });
+      widget.onProfileUpdated?.call();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile picture updated.'), backgroundColor: Color(0xFF2ECC71)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _uploadingAvatar = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Profile picture upload failed: ${e.toString()}'), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -153,7 +178,7 @@ class _ProfilePageState extends State<ProfilePage> {
       final updates = <String, dynamic>{
         'name': _nameController.text.trim(),
         'phone': _phoneController.text.trim(),
-        'student_id': _idController.text.trim(),
+        'student_id': _needsId ? _idController.text.trim() : '',
         'department': _needsDepartment ? _selectedDept : '',
         'program': _needsProgram ? _selectedProgram : '',
         'blood_group': _selectedBlood,
@@ -165,7 +190,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
       if (!mounted) return;
       setState(() {
-        _profile = fresh ?? {...?_profile, ...updates};
+        _profile = fresh ?? {...(_profile ?? <String, dynamic>{}), ...updates};
         _editing = false;
         _saving = false;
       });
@@ -258,20 +283,34 @@ class _ProfilePageState extends State<ProfilePage> {
           Stack(
             alignment: Alignment.bottomRight,
             children: [
-              const CircleAvatar(
-                radius: 38,
+              CircleAvatar(
+                radius: 40,
                 backgroundColor: Colors.white,
-                child: Icon(Icons.person, size: 42, color: Color(0xFF123D35)),
-              ),
-              if (!_editing)
-                GestureDetector(
-                  onTap: _enterEditMode,
-                  child: Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: const BoxDecoration(color: Color(0xFF2ECC71), shape: BoxShape.circle),
-                    child: const Icon(Icons.edit, color: Colors.white, size: 15),
-                  ),
+                child: CircleAvatar(
+                  radius: 37,
+                  backgroundColor: const Color(0xFFEAF7F0),
+                  backgroundImage: ((_profile?['avatar_url'] ?? '').toString().isNotEmpty)
+                      ? NetworkImage((_profile?['avatar_url'] ?? '').toString())
+                      : null,
+                  child: ((_profile?['avatar_url'] ?? '').toString().isEmpty)
+                      ? const Icon(Icons.person, size: 42, color: Color(0xFF123D35))
+                      : null,
                 ),
+              ),
+              GestureDetector(
+                onTap: _uploadingAvatar ? null : _pickAndUploadAvatar,
+                child: Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: const BoxDecoration(color: Color(0xFF2ECC71), shape: BoxShape.circle),
+                  child: _uploadingAvatar
+                      ? const SizedBox(
+                          width: 15,
+                          height: 15,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.camera_alt, color: Colors.white, size: 15),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -317,7 +356,7 @@ class _ProfilePageState extends State<ProfilePage> {
         _buildCard('Personal Information', [
           _item(Icons.email_outlined, 'Email', email, locked: true),
           _item(Icons.phone_outlined, 'Phone', phone),
-          _item(Icons.badge_outlined, _idLabel, id),
+          if (_needsId) _item(Icons.badge_outlined, _idLabel, id),
         ]),
         if (_needsDepartment || _needsProgram)
           _buildCard('University Information', [
@@ -379,15 +418,17 @@ class _ProfilePageState extends State<ProfilePage> {
                 },
               ),
               const SizedBox(height: 10),
-              InputField(
-                controller: _idController,
-                keyboardType: TextInputType.text,
-                label: _idLabel,
-                hint: 'Enter your university ID',
-                icon: Icons.badge_outlined,
-                validator: (v) => (v == null || v.trim().isEmpty) ? '$_idLabel is required' : null,
-              ),
-              const SizedBox(height: 16),
+              if (_needsId) ...[
+                InputField(
+                  controller: _idController,
+                  keyboardType: TextInputType.text,
+                  label: _idLabel,
+                  hint: 'Enter your student ID',
+                  icon: Icons.badge_outlined,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? '$_idLabel is required' : null,
+                ),
+                const SizedBox(height: 16),
+              ],
               if (_needsDepartment) ...[
                 _buildDropdown(label: 'Department / Office', value: _selectedDept, items: _departments, icon: Icons.school_outlined, onChanged: (v) => setState(() => _selectedDept = v!)),
                 const SizedBox(height: 10),
@@ -428,7 +469,8 @@ class _ProfilePageState extends State<ProfilePage> {
     required void Function(String?) onChanged,
   }) {
     return DropdownButtonFormField<String>(
-      value: items.contains(value) ? value : items.first,
+      initialValue: items.contains(value) ? value : items.first,
+      isExpanded: true,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFF123D35)),
@@ -436,7 +478,12 @@ class _ProfilePageState extends State<ProfilePage> {
         fillColor: Colors.white,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
       ),
-      items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+      items: items
+          .map((e) => DropdownMenuItem(
+                value: e,
+                child: Text(e, overflow: TextOverflow.ellipsis),
+              ))
+          .toList(),
       onChanged: onChanged,
       validator: (v) => (v == null || v.isEmpty) ? 'Please select $label' : null,
     );

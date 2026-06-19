@@ -1,68 +1,41 @@
-import 'dart:async';
-import 'dart:ui';
-
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 import 'auth/auth_gate.dart';
-import 'config/app_config.dart';
-import 'firebase_options.dart';
-import 'pages/announcements_page.dart';
-import 'pages/bus_tracking_page.dart';
-import 'pages/complaint_page.dart';
+import 'auth/reset_password_page.dart';
 import 'services/notification_service.dart';
+import 'firebase_options.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-    debugPrint('CrowdNav Flutter error: ${details.exceptionAsString()}');
-  };
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
-  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
-    debugPrint('CrowdNav platform error: $error');
-    return true;
-  };
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-  await runZonedGuarded<Future<void>>(() async {
-    await _initializeCoreServicesSafely();
-    runApp(const CrowdNavApp());
-  }, (Object error, StackTrace stack) {
-    debugPrint('CrowdNav uncaught zone error: $error');
+  await Supabase.initialize(
+    url: 'https://kqsaszkjqbbfhkjmofmw.supabase.co',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtxc2FzemtqcWJiZmhram1vZm13Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4MjQ5MzAsImV4cCI6MjA5MzQwMDkzMH0.1i8NpPJ1TqlumuKtJbfUH9j3qjRHqym_gkkJxRb0Qmw',
+  );
+
+  await NotificationService.initialize(navigatorKey: navigatorKey);
+
+  Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+    if (data.event == AuthChangeEvent.passwordRecovery) {
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (_) => const ResetPasswordPage()),
+      );
+    }
   });
-}
 
-Future<void> _initializeCoreServicesSafely() async {
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-  } catch (e) {
-    debugPrint('Firebase initialization skipped: $e');
-  }
-
-  try {
-    await Supabase.initialize(
-      url: AppConfig.supabaseUrl,
-      anonKey: AppConfig.supabaseAnonKey,
-    );
-  } catch (e) {
-    debugPrint('Supabase initialization failed: $e');
-  }
-
-  try {
-    await NotificationService.initialize(navigatorKey: navigatorKey);
-  } catch (e) {
-    // Notifications must never stop the app from opening.
-    debugPrint('Notification setup skipped: $e');
-  }
+  runApp(const CrowdNavApp());
 }
 
 class CrowdNavApp extends StatelessWidget {
@@ -74,11 +47,6 @@ class CrowdNavApp extends StatelessWidget {
       title: 'CrowdNav',
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
-      routes: {
-        '/announcements': (_) => const AnnouncementsPage(),
-        '/complaints': (_) => const ComplaintPage(),
-        '/bus': (_) => const BusTrackingPage(),
-      },
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: const ColorScheme.light(

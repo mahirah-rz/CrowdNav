@@ -53,6 +53,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
   bool get _needsDepartment => _selectedRole == 'student' || _selectedRole == 'faculty' || _selectedRole == 'office_staff';
   bool get _needsProgram => _selectedRole == 'student';
   bool get _needsRoute => _selectedRole == 'driver';
+  bool get _needsId => _selectedRole == 'student';
 
   @override
   void initState() {
@@ -82,19 +83,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
     }
   }
 
-  String get _idLabel {
-    switch (_selectedRole) {
-      case 'driver':
-        return 'Driver ID';
-      case 'faculty':
-        return 'Faculty ID';
-      case 'office_staff':
-      case 'office staff':
-        return 'Staff ID';
-      default:
-        return 'Student ID';
-    }
-  }
+  String get _idLabel => 'Student ID';
 
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) return;
@@ -103,12 +92,11 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
     try {
       await SupabaseService.upsertProfile({
         'name': _nameController.text.trim(),
-        'student_id': _idController.text.trim(),
+        'student_id': _needsId ? _idController.text.trim() : '',
         'email': widget.email,
         'phone': _phoneController.text.trim(),
         'department': _needsDepartment ? _selectedDepartment : '',
         'program': _needsProgram ? _selectedProgram : '',
-        'office_section': _selectedRole == 'office_staff' ? _selectedDepartment : '',
         'blood_group': _selectedBloodGroup,
         'role': _selectedRole,
         'assigned_route': _needsRoute ? _assignedRoute : '',
@@ -138,7 +126,8 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
     String Function(String)? display,
   }) {
     return DropdownButtonFormField<String>(
-      value: items.contains(value) ? value : items.first,
+      initialValue: items.contains(value) ? value : items.first,
+      isExpanded: true,
       decoration: InputDecoration(
         labelText: label,
         filled: true,
@@ -146,7 +135,13 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       ),
       items: items
-          .map((e) => DropdownMenuItem(value: e, child: Text(display == null ? e : display(e))))
+          .map((e) => DropdownMenuItem(
+                value: e,
+                child: Text(
+                  display == null ? e : display(e),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ))
           .toList(),
       onChanged: onChanged,
     );
@@ -195,15 +190,17 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'Name is required' : null,
                 ),
                 const SizedBox(height: 10),
-                InputField(
-                  controller: _idController,
-                  keyboardType: TextInputType.text,
-                  label: _idLabel,
-                  hint: 'Enter your university ID',
-                  icon: Icons.badge_outlined,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? '$_idLabel is required' : null,
-                ),
-                const SizedBox(height: 10),
+                if (_needsId) ...[
+                  InputField(
+                    controller: _idController,
+                    keyboardType: TextInputType.text,
+                    label: _idLabel,
+                    hint: 'Enter your student ID',
+                    icon: Icons.badge_outlined,
+                    validator: (v) => (v == null || v.trim().isEmpty) ? '$_idLabel is required' : null,
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 InputField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
