@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "394906136895",
+    "project_id": "crowdnav-34386",
+    "storage_bucket": "crowdnav-34386.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:394906136895:android:e9703de957527341a2638a",
+        "android_client_info": {
+          "package_name": "io.crowdnav.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCXgMxSAjf0RIkwwwWre9uFU2WEm2ez3c4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
