@@ -3,10 +3,10 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class GoogleAuthService {
-  // Paste your WEB client ID here, or build with:
-  // flutter build apk --debug --dart-define=GOOGLE_WEB_CLIENT_ID=YOUR_WEB_CLIENT_ID.apps.googleusercontent.com
+  
+  // flutter build apk --debug --dart-define=GOOGLE_WEB_CLIENT_ID=394906136895-dri4qomlqhdot9e5calae78ulua7ach0.apps.googleusercontent.com
   static const String _definedClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
-  static const String _fallbackClientId = 'PASTE_YOUR_WEB_CLIENT_ID.apps.googleusercontent.com';
+  static const String _fallbackClientId = '394906136895-dri4qomlqhdot9e5calae78ulua7ach0.apps.googleusercontent.com';
 
   static String get _webClientId =>
       _definedClientId.isNotEmpty ? _definedClientId : _fallbackClientId;

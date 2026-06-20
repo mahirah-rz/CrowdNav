@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth/auth_gate.dart';
-import 'auth/reset_password_page.dart';
+import 'pages/announcements_page.dart';
+import 'pages/bus_tracking_page.dart';
+import 'pages/complaint_page.dart';
 import 'services/notification_service.dart';
 import 'firebase_options.dart';
 
@@ -26,14 +28,6 @@ Future<void> main() async {
   );
 
   await NotificationService.initialize(navigatorKey: navigatorKey);
-
-  Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-    if (data.event == AuthChangeEvent.passwordRecovery) {
-      navigatorKey.currentState?.push(
-        MaterialPageRoute(builder: (_) => const ResetPasswordPage()),
-      );
-    }
-  });
 
   runApp(const CrowdNavApp());
 }
@@ -79,6 +73,11 @@ class CrowdNavApp extends StatelessWidget {
         ),
       ),
       home: const AuthGate(),
+      routes: {
+        '/announcements': (_) => const AnnouncementsPage(),
+        '/bus': (_) => const BusTrackingPage(),
+        '/complaints': (_) => const ComplaintPage(),
+      },
     );
   }
 }
