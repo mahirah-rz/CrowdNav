@@ -429,6 +429,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const SizedBox(height: 16),
               ],
+              if (!_needsId) const SizedBox(height: 16),
               if (_needsDepartment) ...[
                 _buildDropdown(label: 'Department / Office', value: _selectedDept, items: _departments, icon: Icons.school_outlined, onChanged: (v) => setState(() => _selectedDept = v!)),
                 const SizedBox(height: 10),
@@ -471,18 +472,23 @@ class _ProfilePageState extends State<ProfilePage> {
     return DropdownButtonFormField<String>(
       initialValue: items.contains(value) ? value : items.first,
       isExpanded: true,
+      iconSize: 20,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFF123D35)),
         filled: true,
         fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
       ),
-      items: items
-          .map((e) => DropdownMenuItem(
-                value: e,
-                child: Text(e, overflow: TextOverflow.ellipsis),
+      selectedItemBuilder: (context) => items
+          .map((e) => Align(
+                alignment: Alignment.centerLeft,
+                child: Text(e, overflow: TextOverflow.ellipsis, maxLines: 1),
               ))
+          .toList(),
+      items: items
+          .map((e) => DropdownMenuItem(value: e, child: Text(e, overflow: TextOverflow.ellipsis, maxLines: 1)))
           .toList(),
       onChanged: onChanged,
       validator: (v) => (v == null || v.isEmpty) ? 'Please select $label' : null,

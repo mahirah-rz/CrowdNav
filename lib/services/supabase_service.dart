@@ -56,7 +56,6 @@ class SupabaseService {
   }
 
 
-
   static Future<String> uploadAvatar(File imageFile) async {
     final userId = currentUserId;
     if (userId == null) {

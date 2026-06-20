@@ -235,11 +235,13 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
     return DropdownButtonFormField<String>(
       initialValue: value,
       isExpanded: true,
+      iconSize: 20,
       decoration: InputDecoration(
         labelText: label,
         filled: true,
         fillColor: Colors.white,
         isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
       items: items

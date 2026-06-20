@@ -366,6 +366,7 @@ class _DriverPageState extends State<DriverPage> {
                 DropdownButtonFormField<String>(
                   initialValue: _selectedRoute,
                   isExpanded: true,
+                  iconSize: 20,
                   decoration: InputDecoration(
                     filled: true,
                     fillColor: const Color(0xFFECF0F1),
@@ -373,13 +374,14 @@ class _DriverPageState extends State<DriverPage> {
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide.none,
                     ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                     prefixIcon: const Icon(Icons.route,
                         color: Color(0xFF1E8449)),
                   ),
                   items: _routes
                       .map((r) => DropdownMenuItem(
                             value: r,
-                            child: Text(r, overflow: TextOverflow.ellipsis),
+                            child: Text(r, overflow: TextOverflow.ellipsis, maxLines: 1),
                           ))
                       .toList(),
                   onChanged: _isBroadcasting
@@ -594,6 +596,8 @@ class _DriverPageState extends State<DriverPage> {
               padding: const EdgeInsets.only(bottom: 10),
               child: DropdownButtonFormField<String>(
                 initialValue: _selectedRoute,
+                isExpanded: true,
+                iconSize: 20,
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: const Color(0xFFECF0F1),
@@ -602,13 +606,14 @@ class _DriverPageState extends State<DriverPage> {
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
                   ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   prefixIcon: const Icon(Icons.route,
                       color: Color(0xFF1E8449), size: 18),
                 ),
                 items: _routes
                     .map((r) => DropdownMenuItem(
                           value: r,
-                          child: Text(r,
+                          child: Text(r, overflow: TextOverflow.ellipsis, maxLines: 1,
                               style: const TextStyle(fontSize: 13)),
                         ))
                     .toList(),

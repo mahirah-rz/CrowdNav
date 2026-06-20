@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import '../auth/login_page.dart';
 import '../models/user_model.dart';
 import '../services/supabase_service.dart';
-import '../auth/login_page.dart';
-import 'bus_tracking_page.dart';
-import 'navigation_page.dart';
-import 'weather_page.dart';
+import '../services/weather_service.dart';
 import 'announcements_page.dart';
+import 'bus_tracking_page.dart';
+import 'complaint_page.dart';
+import 'navigation_page.dart';
 import 'profile_page.dart';
 import 'safety_page.dart';
-import 'complaint_page.dart';
+import 'weather_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -41,12 +43,11 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadUser() async {
     try {
       final user = await SupabaseService.getProfile();
-      if (mounted) {
-        setState(() {
-          _user = user;
-          _isLoading = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _user = user;
+        _isLoading = false;
+      });
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -80,24 +81,14 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          _appBarTitles[_currentIndex],
-          style: GoogleFonts.inter(fontSize: 19, fontWeight: FontWeight.w800),
-        ),
+        title: Text(_appBarTitles[_currentIndex], style: GoogleFonts.inter(fontSize: 19, fontWeight: FontWeight.w800)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.health_and_safety_outlined, color: Colors.white),
+            icon: const Icon(Icons.health_and_safety_outlined),
             tooltip: 'Emergency',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SafetyPage()),
-            ),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SafetyPage())),
           ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            tooltip: 'Logout',
-            onPressed: _signOut,
-          ),
+          IconButton(icon: const Icon(Icons.logout), tooltip: 'Logout', onPressed: _signOut),
         ],
       ),
       body: _isLoading ? const Center(child: CircularProgressIndicator()) : pages[_currentIndex],
@@ -119,27 +110,93 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class DashboardTab extends StatelessWidget {
+class DashboardTab extends StatefulWidget {
   final UserModel? user;
   final Function(int) onNavigate;
 
   const DashboardTab({super.key, required this.user, required this.onNavigate});
 
+  @override
+  State<DashboardTab> createState() => _DashboardTabState();
+}
+
+class _DashboardTabState extends State<DashboardTab> {
+  WeatherData? _weather;
+  bool _weatherLoading = true;
+  bool _dialogShown = false;
+
   String get _firstName {
-    final name = user?.name.trim() ?? '';
+    final name = widget.user?.name.trim() ?? '';
     if (name.isEmpty) return 'there';
     return name.split(' ').first;
   }
 
   @override
+  void initState() {
+    super.initState();
+    _loadHomeWeather();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _maybeShowWeatherDialog();
+  }
+
+  Future<void> _loadHomeWeather() async {
+    final data = await WeatherService.fetchWeatherByCity('Sylhet');
+    if (!mounted) return;
+    setState(() {
+      _weather = data;
+      _weatherLoading = false;
+    });
+    _maybeShowWeatherDialog();
+  }
+
+  void _maybeShowWeatherDialog() {
+    if (_dialogShown || _weather == null || !mounted) return;
+    _dialogShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _weather == null) return;
+      final w = _weather!;
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: [
+              const Icon(Icons.cloud_queue_rounded, color: Color(0xFF1E8449)),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Today\'s Weather', style: GoogleFonts.inter(fontWeight: FontWeight.w900))),
+            ],
+          ),
+          content: Text('${w.cityName}: ${w.tempC.toStringAsFixed(0)}°C, ${w.description}.\n\n${w.commuteTip}'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Later')),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const WeatherPage()));
+              },
+              child: const Text('Open Weather'),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
-      onRefresh: () async {},
+      onRefresh: _loadHomeWeather,
       color: const Color(0xFF2ECC71),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         children: [
-          _buildHeroCard(context),
+          _buildHeroCard(),
+          const SizedBox(height: 14),
+          _buildWeatherMiniCard(),
           const SizedBox(height: 18),
           _buildSectionHeader('Quick Services', 'Everything you need on campus'),
           const SizedBox(height: 12),
@@ -151,48 +208,12 @@ class DashboardTab extends StatelessWidget {
             mainAxisSpacing: 12,
             childAspectRatio: 1.15,
             children: [
-              _QuickCard(
-                icon: Icons.directions_bus_filled_rounded,
-                title: 'Live Bus',
-                subtitle: 'Driver GPS tracking',
-                color: const Color(0xFF2E86DE),
-                onTap: () => onNavigate(1),
-              ),
-              _QuickCard(
-                icon: Icons.route_rounded,
-                title: 'Smart Route',
-                subtitle: 'Campus navigation',
-                color: const Color(0xFF123D35),
-                onTap: () => onNavigate(2),
-              ),
-              _QuickCard(
-                icon: Icons.campaign_rounded,
-                title: 'Notices',
-                subtitle: 'Official updates',
-                color: const Color(0xFF8E44AD),
-                onTap: () => onNavigate(3),
-              ),
-              _QuickCard(
-                icon: Icons.support_agent_rounded,
-                title: 'Support',
-                subtitle: 'Complaint portal',
-                color: const Color(0xFFE67E22),
-                onTap: () => onNavigate(4),
-              ),
-              _QuickCard(
-                icon: Icons.wb_sunny_rounded,
-                title: 'Weather',
-                subtitle: 'Commute advice',
-                color: const Color(0xFFF39C12),
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WeatherPage())),
-              ),
-              _QuickCard(
-                icon: Icons.emergency_share_rounded,
-                title: 'Emergency',
-                subtitle: 'Safety contacts',
-                color: const Color(0xFFE74C3C),
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SafetyPage())),
-              ),
+              _QuickCard(icon: Icons.directions_bus_filled_rounded, title: 'Live Bus', subtitle: 'Driver GPS tracking', color: const Color(0xFF2E86DE), onTap: () => widget.onNavigate(1)),
+              _QuickCard(icon: Icons.route_rounded, title: 'Smart Route', subtitle: 'Campus navigation', color: const Color(0xFF123D35), onTap: () => widget.onNavigate(2)),
+              _QuickCard(icon: Icons.campaign_rounded, title: 'Notices', subtitle: 'Official updates', color: const Color(0xFF8E44AD), onTap: () => widget.onNavigate(3)),
+              _QuickCard(icon: Icons.support_agent_rounded, title: 'Support', subtitle: 'Complaint portal', color: const Color(0xFFE67E22), onTap: () => widget.onNavigate(4)),
+              _QuickCard(icon: Icons.wb_sunny_rounded, title: 'Weather', subtitle: 'Forecast and tips', color: const Color(0xFFF39C12), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WeatherPage()))),
+              _QuickCard(icon: Icons.emergency_share_rounded, title: 'Emergency', subtitle: 'Safety contacts', color: const Color(0xFFE74C3C), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SafetyPage()))),
             ],
           ),
           const SizedBox(height: 20),
@@ -202,26 +223,15 @@ class DashboardTab extends StatelessWidget {
     );
   }
 
-  Widget _buildHeroCard(BuildContext context) {
-    final role = (user?.role ?? 'student').replaceAll('_', ' ').toUpperCase();
-    final department = user?.department ?? '';
-
+  Widget _buildHeroCard() {
+    final role = (widget.user?.role ?? 'student').replaceAll('_', ' ').toUpperCase();
+    final department = widget.user?.department ?? '';
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF123D35), Color(0xFF1E6B5C)],
-        ),
+        gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF123D35), Color(0xFF1E6B5C)]),
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF123D35).withOpacity(0.18),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: const Color(0xFF123D35).withOpacity(0.18), blurRadius: 18, offset: const Offset(0, 10))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -230,21 +240,16 @@ class DashboardTab extends StatelessWidget {
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.14),
-                  borderRadius: BorderRadius.circular(16),
-                ),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.14), borderRadius: BorderRadius.circular(16)),
                 child: const Icon(Icons.directions_bus_filled_rounded, color: Colors.white, size: 28),
               ),
               const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.14),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: Colors.white.withOpacity(0.22)),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.14), borderRadius: BorderRadius.circular(30), border: Border.all(color: Colors.white.withOpacity(0.22))),
+                  child: Text(role, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
                 ),
-                child: Text(role, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
               ),
             ],
           ),
@@ -258,9 +263,9 @@ class DashboardTab extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              _HeroAction(label: 'Track Bus', icon: Icons.my_location_rounded, onTap: () => onNavigate(1)),
+              _HeroAction(label: 'Track Bus', icon: Icons.my_location_rounded, onTap: () => widget.onNavigate(1)),
               const SizedBox(width: 10),
-              _HeroAction(label: 'View Notices', icon: Icons.notifications_active_rounded, onTap: () => onNavigate(3)),
+              _HeroAction(label: 'View Notices', icon: Icons.notifications_active_rounded, onTap: () => widget.onNavigate(3)),
             ],
           ),
         ],
@@ -268,19 +273,45 @@ class DashboardTab extends StatelessWidget {
     );
   }
 
+  Widget _buildWeatherMiniCard() {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WeatherPage())),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 12, offset: const Offset(0, 5))]),
+        child: _weatherLoading
+            ? const Row(children: [SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)), SizedBox(width: 12), Text('Loading weather...')])
+            : _weather == null
+                ? const Row(children: [Icon(Icons.cloud_off, color: Colors.grey), SizedBox(width: 12), Expanded(child: Text('Weather unavailable. Tap to open weather page.'))])
+                : Row(
+                    children: [
+                      Image.network(_weather!.iconUrl, width: 48, height: 48, errorBuilder: (_, __, ___) => const Icon(Icons.cloud, color: Color(0xFF1E8449), size: 42)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('${_weather!.tempC.toStringAsFixed(0)}°C • ${_weather!.cityName}', style: GoogleFonts.inter(fontWeight: FontWeight.w900, color: const Color(0xFF123D35))),
+                            const SizedBox(height: 2),
+                            Text(_weather!.commuteTip, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right, color: Color(0xFF1E8449)),
+                    ],
+                  ),
+      ),
+    );
+  }
+
   Widget _buildSectionHeader(String title, String subtitle) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w900, color: const Color(0xFF123D35))),
-              const SizedBox(height: 2),
-              Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-            ],
-          ),
-        ),
+        Text(title, style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w900, color: const Color(0xFF123D35))),
+        const SizedBox(height: 2),
+        Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.black54)),
       ],
     );
   }
@@ -293,18 +324,12 @@ class DashboardTab extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2ECC71).withOpacity(0.12),
-                borderRadius: BorderRadius.circular(14),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF2ECC71).withOpacity(0.12), borderRadius: BorderRadius.circular(14)),
               child: const Icon(Icons.verified_user_outlined, color: Color(0xFF123D35)),
             ),
             const SizedBox(width: 12),
             const Expanded(
-              child: Text(
-                'Use verified profiles, live driver location, official notices, weather tips and emergency support from one app.',
-                style: TextStyle(fontSize: 13, height: 1.45, color: Color(0xFF2C3E50)),
-              ),
+              child: Text('Use verified profiles, live driver location, official notices, weather tips and emergency support from one app.', style: TextStyle(fontSize: 13, height: 1.45, color: Color(0xFF2C3E50))),
             ),
           ],
         ),
@@ -328,16 +353,13 @@ class _HeroAction extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-          ),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, size: 17, color: const Color(0xFF123D35)),
               const SizedBox(width: 6),
-              Text(label, style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF123D35), fontSize: 12)),
+              Flexible(child: Text(label, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF123D35), fontSize: 12))),
             ],
           ),
         ),
@@ -353,45 +375,30 @@ class _QuickCard extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
 
-  const _QuickCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
+  const _QuickCard({required this.icon, required this.title, required this.subtitle, required this.color, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
+    return InkWell(
+      onTap: onTap,
       borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFFE1E8E5)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              const Spacer(),
-              Text(title, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w900, color: const Color(0xFF123D35))),
-              const SizedBox(height: 3),
-              Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.black54)),
-            ],
-          ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 6))]),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(14)), child: Icon(icon, color: color, size: 28)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w900, color: const Color(0xFF123D35))),
+                const SizedBox(height: 3),
+                Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+              ],
+            ),
+          ],
         ),
       ),
     );

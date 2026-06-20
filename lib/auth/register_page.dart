@@ -201,17 +201,34 @@ class _RegisterPageState extends State<RegisterPage> {
   }) {
     return DropdownButtonFormField<String>(
       initialValue: items.contains(value) ? value : items.first,
+      isExpanded: true,
+      iconSize: 20,
       decoration: InputDecoration(
         labelText: label,
         filled: true,
         fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       ),
+      selectedItemBuilder: (context) => items
+          .map((e) => Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  display == null ? e : display(e),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ))
+          .toList(),
       items: items
           .map(
             (e) => DropdownMenuItem(
               value: e,
-              child: Text(display == null ? e : display(e)),
+              child: Text(
+                display == null ? e : display(e),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
             ),
           )
           .toList(),
