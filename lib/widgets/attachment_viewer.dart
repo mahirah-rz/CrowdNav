@@ -158,67 +158,135 @@ class _AttachmentActionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isLink = attachment.isLink;
+    final iconSize = compact ? 16.0 : 20.0;
+    final actionSize = compact ? 34.0 : 38.0;
 
     return Container(
+      width: double.infinity,
       margin: EdgeInsets.only(bottom: compact ? 6 : 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 10,
+        vertical: compact ? 7 : 9,
+      ),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FBF9),
         borderRadius: BorderRadius.circular(compact ? 10 : 14),
         border: Border.all(color: const Color(0xFFDCEFE3)),
       ),
-      child: ListTile(
-        dense: compact,
-        minLeadingWidth: compact ? 28 : null,
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: compact ? 8 : 12,
-          vertical: compact ? 0 : 4,
-        ),
-        leading: CircleAvatar(
-          radius: compact ? 15 : 20,
-          backgroundColor: isLink ? const Color(0xFFEAF3FF) : const Color(0xFFE8F5EA),
-          foregroundColor: isLink ? const Color(0xFF2E73B8) : const Color(0xFF1E8E4E),
-          child: Icon(isLink ? Icons.link : _fileIcon(attachment.fileName), size: compact ? 16 : 22),
-        ),
-        title: Text(
-          attachment.fileName,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.poppins(
-            fontSize: compact ? 12 : 14,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        subtitle: Text(
-          isLink ? _cleanUrlHost(attachment.fileUrl) : _formatSize(attachment.fileSize),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.poppins(fontSize: compact ? 10 : 12),
-        ),
-        trailing: SizedBox(
-          width: compact ? 72 : 88,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          
+          final isVeryNarrow = constraints.maxWidth < 300;
+          final titleBlock = Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              IconButton(
-                tooltip: isLink ? 'Open link' : 'View / download file',
-                icon: Icon(isLink ? Icons.open_in_new : Icons.download_outlined, size: compact ? 18 : 22),
-                color: const Color(0xFF1E8E4E),
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints.tightFor(width: compact ? 34 : 40, height: compact ? 34 : 40),
-                onPressed: () => _openUrl(context, attachment.fileUrl),
+              CircleAvatar(
+                radius: compact ? 15 : 19,
+                backgroundColor: isLink
+                    ? const Color(0xFFEAF3FF)
+                    : const Color(0xFFE8F5EA),
+                foregroundColor: isLink
+                    ? const Color(0xFF2E73B8)
+                    : const Color(0xFF1E8E4E),
+                child: Icon(
+                  isLink ? Icons.link : _fileIcon(attachment.fileName),
+                  size: iconSize,
+                ),
               ),
-              IconButton(
-                tooltip: 'Copy link',
-                icon: Icon(Icons.copy, size: compact ? 17 : 20),
-                color: const Color(0xFF425466),
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints.tightFor(width: compact ? 34 : 40, height: compact ? 34 : 40),
-                onPressed: () => _copyUrl(context, attachment.fileUrl),
+              SizedBox(width: compact ? 8 : 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      attachment.fileName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                      style: GoogleFonts.poppins(
+                        fontSize: compact ? 12 : 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isLink
+                          ? _cleanUrlHost(attachment.fileUrl)
+                          : _formatSize(attachment.fileSize),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                      style: GoogleFonts.poppins(
+                        fontSize: compact ? 10 : 11,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
-          ),
-        ),
+          );
+
+          final actions = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: actionSize,
+                height: actionSize,
+                child: IconButton(
+                  tooltip: isLink ? 'Open link' : 'View / download file',
+                  icon: Icon(
+                    isLink ? Icons.open_in_new : Icons.download_outlined,
+                    size: compact ? 18 : 20,
+                  ),
+                  color: const Color(0xFF1E8E4E),
+                  padding: EdgeInsets.zero,
+                  onPressed: () => _openUrl(context, attachment.fileUrl),
+                ),
+              ),
+              SizedBox(
+                width: actionSize,
+                height: actionSize,
+                child: IconButton(
+                  tooltip: 'Copy link',
+                  icon: Icon(Icons.copy, size: compact ? 17 : 19),
+                  color: const Color(0xFF425466),
+                  padding: EdgeInsets.zero,
+                  onPressed: () => _copyUrl(context, attachment.fileUrl),
+                ),
+              ),
+            ],
+          );
+
+          if (isVeryNarrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                titleBlock,
+                const SizedBox(height: 6),
+                Align(alignment: Alignment.centerRight, child: actions),
+              ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: titleBlock),
+              SizedBox(width: compact ? 6 : 8),
+              Flexible(
+                flex: 0,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: actions,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -252,7 +320,7 @@ class LinkifiedText extends StatelessWidget {
 
       spans.add(
         TextSpan(
-          text: rawUrl,
+          text: _breakLongUrl(rawUrl),
           style: const TextStyle(
             color: Color(0xFF1669C1),
             decoration: TextDecoration.underline,
@@ -361,6 +429,20 @@ Future<void> _copyUrl(BuildContext context, String url) async {
 
 void _message(BuildContext context, String text) {
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+}
+
+
+String _breakLongUrl(String value) {
+  // Adds soft break points to very long URLs so Bengali/English notices do not
+  // produce right-side pixel overflow on small Android screens.
+  return value
+      .replaceAll('/', '/​')
+      .replaceAll('&', '&​')
+      .replaceAll('?', '?​')
+      .replaceAll('=', '=​')
+      .replaceAll('-', '-​')
+      .replaceAll('_', '_​')
+      .replaceAll('.', '.​');
 }
 
 String _formatSize(int bytes) {

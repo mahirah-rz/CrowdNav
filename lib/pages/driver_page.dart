@@ -421,7 +421,7 @@ class _DriverPageState extends State<DriverPage> {
           ),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
-            value: _routes.contains(_selectedRoute) ? _selectedRoute : _routes.first,
+            initialValue: _routes.contains(_selectedRoute) ? _selectedRoute : _routes.first,
             isExpanded: true,
             decoration: InputDecoration(
               filled: true,

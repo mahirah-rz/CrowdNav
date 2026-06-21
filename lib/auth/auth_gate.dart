@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'login_page.dart';
 import '../models/user_model.dart';
 import '../pages/admin_page.dart';
 import '../pages/driver_page.dart';

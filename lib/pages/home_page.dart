@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/user_model.dart';
 import '../services/supabase_service.dart';
+import '../services/weather_service.dart';
 import '../auth/login_page.dart';
 import 'bus_tracking_page.dart';
 import 'navigation_page.dart';
@@ -223,11 +226,7 @@ class DashboardTab extends StatelessWidget {
         children: [
           _buildHeroCard(context),
           const SizedBox(height: 14),
-          _EssentialBar(
-            icon: Icons.wb_sunny_rounded,
-            title: 'Weather',
-            subtitle: 'Check commute-friendly weather updates',
-            color: const Color(0xFFF39C12),
+          _HomeWeatherWidget(
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WeatherPage())),
           ),
           const SizedBox(height: 10),
@@ -260,7 +259,7 @@ class DashboardTab extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF123D35).withValues(alpha: 0.18),
+            color: const Color(0xFF123D35).withOpacity(0.18),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -295,13 +294,30 @@ class DashboardTab extends StatelessWidget {
           Text(isLoggedIn ? 'Hi, $_firstName' : 'Welcome to CrowdNav', style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
           const SizedBox(height: 6),
           Text(
-            !isLoggedIn ? 'Your Complete LU Experience' : department.isEmpty ? 'Navigate smarter across Leading University.' : '$department • Leading University',
+            !isLoggedIn ? 'Explore campus map, weather and emergency support. Login for bus tracking, notices and complaints.' : department.isEmpty ? 'Navigate smarter across Leading University.' : '$department • Leading University',
             style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
           ),
           const SizedBox(height: 16),
           _HeroAction(label: 'View Notices', icon: Icons.notifications_active_rounded, onTap: () => onNavigate(3)),
         ],
       ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, String subtitle) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w900, color: const Color(0xFF123D35))),
+              const SizedBox(height: 2),
+              Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -322,7 +338,7 @@ class DashboardTab extends StatelessWidget {
             const SizedBox(width: 12),
             const Expanded(
               child: Text(
-                'Use verified profiles, live driver location, official notices, weather tips and emergency support from one app.',
+                'Your LU Campus Companion!',
                 style: TextStyle(fontSize: 13, height: 1.45, color: Color(0xFF2C3E50)),
               ),
             ),
@@ -359,6 +375,158 @@ class _HeroAction extends StatelessWidget {
             const SizedBox(width: 6),
             Text(label, style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF123D35), fontSize: 12)),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class _HomeWeatherWidget extends StatefulWidget {
+  final VoidCallback onTap;
+
+  const _HomeWeatherWidget({required this.onTap});
+
+  @override
+  State<_HomeWeatherWidget> createState() => _HomeWeatherWidgetState();
+}
+
+class _HomeWeatherWidgetState extends State<_HomeWeatherWidget> {
+  WeatherData? _weather;
+  bool _loading = true;
+  bool _showingSylhetFallback = false;
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWeather();
+    _refreshTimer = Timer.periodic(const Duration(minutes: 10), (_) => _loadWeather(showLoader: false));
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadWeather({bool showLoader = true}) async {
+    if (showLoader && mounted) setState(() => _loading = true);
+
+    WeatherData? weather;
+    bool fallbackToSylhet = false;
+
+    try {
+      
+      weather = await WeatherService.fetchWeather();
+    } catch (_) {
+      
+      weather = null;
+    }
+
+    if (weather == null) {
+      fallbackToSylhet = true;
+      weather = await WeatherService.fetchWeatherByCity('Sylhet');
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _weather = weather;
+      _showingSylhetFallback = fallbackToSylhet;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final temperature = _weather == null ? '26°C' : '${_weather!.tempC.round()}°C';
+    final location = _weather == null
+        ? 'Sylhet Division'
+        : _showingSylhetFallback
+            ? 'Sylhet Division'
+            : (_weather!.cityName.isEmpty ? 'Current location' : _weather!.cityName);
+    final message = _loading
+        ? 'Checking live weather near you...'
+        : (_weather?.commuteTip ?? 'Unable to update weather right now.');
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(22),
+      elevation: 2,
+      shadowColor: Colors.black.withOpacity(0.08),
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: const Color(0xFFE1E8E5)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F7F6),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: _weather == null
+                    ? const Icon(
+                        Icons.cloud_rounded,
+                        color: Color(0xFFB8BFBE),
+                        size: 34,
+                      )
+                    : Image.network(
+                        _weather!.iconUrl,
+                        width: 44,
+                        height: 44,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.cloud_rounded,
+                          color: Color(0xFFB8BFBE),
+                          size: 34,
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$temperature • $location',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: const Color(0xFF123D35),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      message,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFF1E8449),
+                size: 30,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -418,6 +586,58 @@ class _EssentialBar extends StatelessWidget {
                 ),
               ),
               const Icon(Icons.chevron_right_rounded, color: Color(0xFF1E8449)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _QuickCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE1E8E5)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const Spacer(),
+              Text(title, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w900, color: const Color(0xFF123D35))),
+              const SizedBox(height: 3),
+              Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.black54)),
             ],
           ),
         ),
