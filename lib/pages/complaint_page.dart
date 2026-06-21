@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+
+import '../models/app_attachment.dart';
 import '../models/complaint_model.dart';
 import '../services/supabase_service.dart';
+import '../widgets/attachment_picker_panel.dart';
 import '../widgets/input_field.dart';
 import 'complaint_detail_page.dart';
 
@@ -33,10 +36,7 @@ class ComplaintPage extends StatelessWidget {
             Expanded(
               child: TabBarView(
                 children: [
-                  _SubmitTab(
-                    onSubmitted: () =>
-                        DefaultTabController.of(ctx).animateTo(1),
-                  ),
+                  _SubmitTab(onSubmitted: () => DefaultTabController.of(ctx).animateTo(1)),
                   const _MyComplaintsTab(),
                 ],
               ),
@@ -50,7 +50,6 @@ class ComplaintPage extends StatelessWidget {
 
 class _SubmitTab extends StatefulWidget {
   final VoidCallback onSubmitted;
-
   const _SubmitTab({required this.onSubmitted});
 
   @override
@@ -61,12 +60,14 @@ class _SubmitTabState extends State<_SubmitTab> {
   final _formKey = GlobalKey<FormState>();
   final _subjectController = TextEditingController();
   final _descController = TextEditingController();
+  final List<PickedAttachment> _files = [];
+  final List<NoticeLink> _links = [];
 
   String _category = 'Academic Issue';
-  String _priority = 'normal';
+  String _priority = 'Normal';
   bool _submitting = false;
 
-  final List<String> _categories = [
+  final List<String> _categories = const [
     'Academic Issue',
     'Transport Complaint',
     'Fee / Finance',
@@ -75,7 +76,7 @@ class _SubmitTabState extends State<_SubmitTab> {
     'General Inquiry',
   ];
 
-  final List<String> _priorities = ['normal', 'high', 'urgent'];
+  final List<String> _priorities = const ['Normal', 'High', 'Urgent'];
 
   @override
   void dispose() {
@@ -94,32 +95,29 @@ class _SubmitTabState extends State<_SubmitTab> {
         subject: _subjectController.text.trim(),
         description: _descController.text.trim(),
         priority: _priority,
+        files: _files,
+        links: _links,
       );
 
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Complaint submitted successfully!'),
-          backgroundColor: Color(0xFF2ECC71),
-        ),
+        const SnackBar(content: Text('Complaint submitted successfully!'), backgroundColor: Color(0xFF2ECC71)),
       );
 
       _subjectController.clear();
       _descController.clear();
       setState(() {
         _category = 'Academic Issue';
-        _priority = 'normal';
+        _priority = 'Normal';
+        _files.clear();
+        _links.clear();
       });
 
       widget.onSubmitted();
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to submit. Please try again.'),
-          backgroundColor: Colors.redAccent,
-        ),
+        SnackBar(content: Text('Failed to submit: ${e.toString()}'), backgroundColor: Colors.redAccent),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -128,9 +126,9 @@ class _SubmitTabState extends State<_SubmitTab> {
 
   Color _priorityColor(String p) {
     switch (p) {
-      case 'urgent':
+      case 'Urgent':
         return Colors.redAccent;
-      case 'high':
+      case 'High':
         return Colors.orange;
       default:
         return const Color(0xFF2ECC71);
@@ -149,92 +147,60 @@ class _SubmitTabState extends State<_SubmitTab> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E8449).withOpacity( 0.1),
+                color: const Color(0xFF1E8449).withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: const Color(0xFF1E8449).withOpacity( 0.3),
-                ),
+                border: Border.all(color: const Color(0xFF1E8449).withValues(alpha: 0.30)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline,
-                      color: Color(0xFF1E8449), size: 20),
+                  const Icon(Icons.info_outline, color: Color(0xFF1E8449), size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Your complaint will be reviewed by the Proctor\'s office. You will receive a reply in the conversation thread.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[700],
-                        height: 1.4,
-                      ),
+                      'Add your complaint',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[700], height: 1.4),
                     ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 20),
-            Text(
-              'Category',
-              style: GoogleFonts.inter(
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF2C3E50),
-              ),
-            ),
+            Text('Category', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF2C3E50))),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              initialValue: _category,
+              value: _category,
               decoration: InputDecoration(
                 labelText: 'Select Category',
                 filled: true,
                 fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              items: _categories
-                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                  .toList(),
+              items: _categories.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
               onChanged: (v) => setState(() => _category = v!),
               validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
             ),
             const SizedBox(height: 16),
-            Text(
-              'Priority',
-              style: GoogleFonts.inter(
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF2C3E50),
-              ),
-            ),
+            Text('Priority', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF2C3E50))),
             const SizedBox(height: 8),
             Row(
               children: _priorities.map((p) {
                 final selected = _priority == p;
+                final color = _priorityColor(p);
                 return Expanded(
                   child: GestureDetector(
                     onTap: () => setState(() => _priority = p),
                     child: Container(
-                      margin: EdgeInsets.only(
-                        right: p != _priorities.last ? 8 : 0,
-                      ),
+                      margin: EdgeInsets.only(right: p != _priorities.last ? 8 : 0),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
-                        color: selected ? _priorityColor(p) : Colors.white,
+                        color: selected ? color : Colors.white,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: _priorityColor(p),
-                          width: selected ? 0 : 1,
-                        ),
+                        border: Border.all(color: color, width: selected ? 0 : 1),
                       ),
                       alignment: Alignment.center,
                       child: Text(
                         p[0].toUpperCase() + p.substring(1),
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color:
-                              selected ? Colors.white : _priorityColor(p),
-                        ),
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: selected ? Colors.white : color),
                       ),
                     ),
                   ),
@@ -242,13 +208,7 @@ class _SubmitTabState extends State<_SubmitTab> {
               }).toList(),
             ),
             const SizedBox(height: 16),
-            Text(
-              'Subject',
-              style: GoogleFonts.inter(
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF2C3E50),
-              ),
-            ),
+            Text('Subject', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF2C3E50))),
             const SizedBox(height: 8),
             InputField(
               controller: _subjectController,
@@ -263,57 +223,51 @@ class _SubmitTabState extends State<_SubmitTab> {
               },
             ),
             const SizedBox(height: 16),
-            Text(
-              'Description',
-              style: GoogleFonts.inter(
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF2C3E50),
-              ),
-            ),
+            Text('Description', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: const Color(0xFF2C3E50))),
             const SizedBox(height: 8),
             InputField(
               controller: _descController,
               keyboardType: TextInputType.multiline,
               label: 'Describe your issue',
-              hint: 'Provide as much detail as possible...',
+              hint: 'Provide details',
               icon: Icons.description_outlined,
               maxLines: 5,
               validator: (v) {
-                if (v == null || v.trim().isEmpty) {
-                  return 'Description is required';
-                }
-                if (v.trim().length < 20) {
-                  return 'Please provide more detail (min 20 characters)';
-                }
+                if (v == null || v.trim().isEmpty) return 'Description is required';
+                if (v.trim().length < 20) return 'Please provide more detail (min 20 characters)';
                 return null;
               },
+            ),
+            const SizedBox(height: 16),
+            AttachmentPickerPanel(
+              title: 'Complaint proof: images, files and links',
+              files: _files,
+              links: _links,
+              onFilesChanged: (v) => setState(() {
+                _files
+                  ..clear()
+                  ..addAll(v);
+              }),
+              onLinksChanged: (v) => setState(() {
+                _links
+                  ..clear()
+                  ..addAll(v);
+              }),
             ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
               height: 50,
               child: _submitting
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xFF2ECC71),
-                      ),
-                    )
+                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF2ECC71)))
                   : ElevatedButton.icon(
                       onPressed: _submit,
                       icon: const Icon(Icons.send),
-                      label: Text(
-                        'Submit Complaint',
-                        style: GoogleFonts.inter(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      label: Text('Submit Complaint', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF2ECC71),
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
             ),
@@ -388,11 +342,7 @@ class _MyComplaintsTabState extends State<_MyComplaintsTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF2ECC71)),
-      );
-    }
+    if (_loading) return const Center(child: CircularProgressIndicator(color: Color(0xFF2ECC71)));
 
     if (_complaints.isEmpty) {
       return Center(
@@ -401,19 +351,9 @@ class _MyComplaintsTabState extends State<_MyComplaintsTab> {
           children: [
             Icon(Icons.inbox_outlined, size: 72, color: Colors.grey[300]),
             const SizedBox(height: 16),
-            Text(
-              'No complaints yet',
-              style: GoogleFonts.inter(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[500],
-              ),
-            ),
+            Text('No complaints yet', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.grey[500])),
             const SizedBox(height: 6),
-            Text(
-              'Use the Submit tab to raise an issue.',
-              style: TextStyle(color: Colors.grey[400], fontSize: 13),
-            ),
+            Text('Submit a complaint to raise an issue.', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
           ],
         ),
       );
@@ -427,27 +367,18 @@ class _MyComplaintsTabState extends State<_MyComplaintsTab> {
         itemCount: _complaints.length,
         itemBuilder: (context, i) {
           final c = _complaints[i];
-          final statusColor = _statusColor(c.status);
-
+          final color = _statusColor(c.status);
           return Card(
             margin: const EdgeInsets.only(bottom: 10),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),
-              side: BorderSide(
-                color: statusColor.withOpacity( 0.4),
-                width: 1.2,
-              ),
+              side: BorderSide(color: color.withValues(alpha: 0.4), width: 1),
             ),
             child: InkWell(
               borderRadius: BorderRadius.circular(14),
               onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ComplaintDetailPage(complaint: c),
-                  ),
-                );
-                _load();
+                await Navigator.push(context, MaterialPageRoute(builder: (_) => ComplaintDetailPage(complaint: c)));
+                await _load();
               },
               child: Padding(
                 padding: const EdgeInsets.all(14),
@@ -456,81 +387,34 @@ class _MyComplaintsTabState extends State<_MyComplaintsTab> {
                   children: [
                     Row(
                       children: [
-                        Expanded(
-                          child: Text(
-                            c.subject,
-                            style: GoogleFonts.inter(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              color: const Color(0xFF2C3E50),
-                            ),
-                          ),
-                        ),
+                        Icon(_statusIcon(c.status), color: color),
                         const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(c.subject, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: const Color(0xFF2C3E50))),
+                        ),
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: statusColor.withOpacity( 0.12),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: statusColor),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(_statusIcon(c.status),
-                                  size: 12, color: statusColor),
-                              const SizedBox(width: 4),
-                              Text(
-                                _statusLabel(c.status),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: statusColor,
-                                ),
-                              ),
-                            ],
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
+                          child: Text(_statusLabel(c.status), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      c.category,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF1E8449),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      c.description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                        height: 1.4,
-                      ),
-                    ),
+                    const SizedBox(height: 8),
+                    Text(c.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey, height: 1.4)),
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Icon(Icons.access_time,
-                            size: 12, color: Colors.grey[400]),
+                        Icon(Icons.category_outlined, size: 13, color: Colors.grey[500]),
                         const SizedBox(width: 4),
-                        Text(
-                          DateFormat('dd MMM yyyy').format(c.createdAt),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey[400],
-                          ),
-                        ),
+                        Text(c.category, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                        if (c.attachments.isNotEmpty) ...[
+                          const SizedBox(width: 10),
+                          Icon(Icons.attach_file, size: 13, color: Colors.grey[500]),
+                          const SizedBox(width: 3),
+                          Text('${c.attachments.length}', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                        ],
                         const Spacer(),
-                        const Icon(Icons.chevron_right,
-                            color: Colors.grey, size: 18),
+                        Text(DateFormat('dd MMM, hh:mm a').format(c.createdAt), style: const TextStyle(fontSize: 10, color: Colors.grey)),
                       ],
                     ),
                   ],

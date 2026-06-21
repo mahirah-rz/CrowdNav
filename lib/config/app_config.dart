@@ -10,9 +10,9 @@ class AppConfig {
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtxc2FzemtqcWJiZmhram1vZm13Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4MjQ5MzAsImV4cCI6MjA5MzQwMDkzMH0.1i8NpPJ1TqlumuKtJbfUH9j3qjRHqym_gkkJxRb0Qmw',
   );
 
-  /// Set this during release build after deploying the FastAPI backend.
-  /// Example:
-  /// --dart-define=CROWDNAV_BACKEND_URL=https://crowdnav-backend.onrender.com
+  
+ 
+  //--dart-define=CROWDNAV_BACKEND_URL=https://crowdnav-backend.onrender.com
   static const String backendBaseUrl = String.fromEnvironment(
     'CROWDNAV_BACKEND_URL',
     defaultValue: '',

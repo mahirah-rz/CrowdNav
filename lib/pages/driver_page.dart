@@ -7,7 +7,6 @@ import 'package:latlong2/latlong.dart';
 import '../services/supabase_service.dart';
 import '../models/user_model.dart';
 import '../auth/login_page.dart';
-import 'profile_page.dart';
 
 class DriverPage extends StatefulWidget {
   const DriverPage({super.key});
@@ -98,7 +97,9 @@ class _DriverPageState extends State<DriverPage> {
 
     try {
       final firstPosition = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
       if (mounted) {
         setState(() => _currentPosition = firstPosition);
@@ -169,14 +170,6 @@ class _DriverPageState extends State<DriverPage> {
     if (mounted) setState(() => _isBroadcasting = false);
   }
 
-  Future<void> _openProfile() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => ProfilePage(onProfileUpdated: _loadProfile)),
-    );
-    await _loadProfile();
-  }
-
   Future<void> _signOut() async {
     _stopBroadcasting();
     await SupabaseService.signOut();
@@ -212,11 +205,6 @@ class _DriverPageState extends State<DriverPage> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.account_circle_outlined),
-            tooltip: 'Profile',
-            onPressed: _openProfile,
-          ),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
@@ -293,7 +281,7 @@ class _DriverPageState extends State<DriverPage> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity( 0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -302,18 +290,14 @@ class _DriverPageState extends State<DriverPage> {
             child: Column(
               children: [
                 CircleAvatar(
-                  radius: 38,
-                  backgroundColor: const Color(0xFF2ECC71).withOpacity(0.15),
-                  backgroundImage: ((_driver?.avatarUrl ?? '').isNotEmpty)
-                      ? NetworkImage(_driver!.avatarUrl!)
-                      : null,
-                  child: ((_driver?.avatarUrl ?? '').isEmpty)
-                      ? const Icon(
-                          Icons.directions_bus_rounded,
-                          size: 40,
-                          color: Color(0xFF1E8449),
-                        )
-                      : null,
+                  radius: 36,
+                  backgroundColor:
+                      const Color(0xFF2ECC71).withValues(alpha: 0.15),
+                  child: const Icon(
+                    Icons.directions_bus_rounded,
+                    size: 40,
+                    color: Color(0xFF1E8449),
+                  ),
                 ),
                 const SizedBox(height: 14),
                 Text(
@@ -329,7 +313,7 @@ class _DriverPageState extends State<DriverPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2ECC71).withOpacity( 0.15),
+                    color: const Color(0xFF2ECC71).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text(
@@ -365,8 +349,6 @@ class _DriverPageState extends State<DriverPage> {
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedRoute,
-                  isExpanded: true,
-                  iconSize: 20,
                   decoration: InputDecoration(
                     filled: true,
                     fillColor: const Color(0xFFECF0F1),
@@ -374,15 +356,12 @@ class _DriverPageState extends State<DriverPage> {
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide.none,
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                     prefixIcon: const Icon(Icons.route,
                         color: Color(0xFF1E8449)),
                   ),
                   items: _routes
-                      .map((r) => DropdownMenuItem(
-                            value: r,
-                            child: Text(r, overflow: TextOverflow.ellipsis, maxLines: 1),
-                          ))
+                      .map((r) =>
+                          DropdownMenuItem(value: r, child: Text(r)))
                       .toList(),
                   onChanged: _isBroadcasting
                       ? null
@@ -396,10 +375,10 @@ class _DriverPageState extends State<DriverPage> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.redAccent.withOpacity( 0.1),
+                color: Colors.redAccent.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: Colors.redAccent.withOpacity( 0.4),
+                  color: Colors.redAccent.withValues(alpha: 0.4),
                 ),
               ),
               child: Row(
@@ -497,7 +476,7 @@ class _DriverPageState extends State<DriverPage> {
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity( 0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 8,
                 ),
               ],
@@ -530,7 +509,7 @@ class _DriverPageState extends State<DriverPage> {
               borderRadius: BorderRadius.circular(10),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity( 0.08),
+                  color: Colors.black.withValues(alpha: 0.08),
                   blurRadius: 6,
                 ),
               ],
@@ -596,8 +575,6 @@ class _DriverPageState extends State<DriverPage> {
               padding: const EdgeInsets.only(bottom: 10),
               child: DropdownButtonFormField<String>(
                 initialValue: _selectedRoute,
-                isExpanded: true,
-                iconSize: 20,
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: const Color(0xFFECF0F1),
@@ -606,14 +583,13 @@ class _DriverPageState extends State<DriverPage> {
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   prefixIcon: const Icon(Icons.route,
                       color: Color(0xFF1E8449), size: 18),
                 ),
                 items: _routes
                     .map((r) => DropdownMenuItem(
                           value: r,
-                          child: Text(r, overflow: TextOverflow.ellipsis, maxLines: 1,
+                          child: Text(r,
                               style: const TextStyle(fontSize: 13)),
                         ))
                     .toList(),

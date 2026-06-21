@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'login_page.dart';
-import '../pages/home_page.dart';
-import '../pages/driver_page.dart';
+
 import '../pages/admin_page.dart';
 import '../pages/complete_profile_page.dart';
-import '../services/supabase_service.dart';
+import '../pages/driver_page.dart';
+import '../pages/home_page.dart';
 import '../services/notification_service.dart';
+import '../services/supabase_service.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -22,8 +22,9 @@ class AuthGate extends StatelessWidget {
           return const _SplashScreen();
         }
 
+        
         if (session == null) {
-          return const LoginPage();
+          return const HomePage();
         }
 
         return FutureBuilder<Map<String, dynamic>?>(
@@ -68,15 +69,20 @@ class AuthGate extends StatelessWidget {
     final profile = await SupabaseService.getProfileMap();
 
     if (profile != null && _isProfileComplete(profile)) {
-      await NotificationService.saveTokenToSupabase();
-      await NotificationService.subscribeUserTopics(
-        department: (profile['department'] ?? '').toString().isEmpty
-            ? 'all'
-            : profile['department'].toString(),
-        program: (profile['program'] ?? '').toString().isEmpty
-            ? 'all'
-            : profile['program'].toString(),
-      );
+      try {
+        await NotificationService.saveTokenToSupabase();
+        await NotificationService.subscribeUserTopics(
+          department: (profile['department'] ?? '').toString().isEmpty
+              ? 'all'
+              : profile['department'].toString(),
+          program: (profile['program'] ?? '').toString().isEmpty
+              ? 'all'
+              : profile['program'].toString(),
+        );
+      } catch (e) {
+        
+        debugPrint('Notification setup skipped: $e');
+      }
     }
 
     return profile;
@@ -152,8 +158,10 @@ class _AuthErrorScreen extends StatelessWidget {
               Text(error, textAlign: TextAlign.center),
               const SizedBox(height: 18),
               ElevatedButton(
-                onPressed: () => SupabaseService.signOut(),
-                child: const Text('Back to login'),
+                onPressed: () async {
+                  await SupabaseService.signOut();
+                },
+                child: const Text('Back to Home'),
               ),
             ],
           ),

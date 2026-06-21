@@ -8,7 +8,7 @@ import '../services/supabase_service.dart';
 import '../auth/login_page.dart';
 import '../widgets/input_field.dart';
 import 'complaint_detail_page.dart';
-import 'profile_page.dart';
+import 'announcements_page.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -38,14 +38,6 @@ class _AdminPageState extends State<AdminPage>
   Future<void> _loadAdmin() async {
     final user = await SupabaseService.getProfile();
     if (mounted) setState(() => _admin = user);
-  }
-
-  Future<void> _openProfile() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => ProfilePage(onProfileUpdated: _loadAdmin)),
-    );
-    await _loadAdmin();
   }
 
   Future<void> _signOut() async {
@@ -78,11 +70,6 @@ class _AdminPageState extends State<AdminPage>
                 ),
               ),
             ),
-          IconButton(
-            icon: const Icon(Icons.account_circle_outlined),
-            tooltip: 'Profile',
-            onPressed: _openProfile,
-          ),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
@@ -136,7 +123,7 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
   bool _loadingList = true;
 
   final List<String> _departments = [
-    'all',
+    'All',
     'CSE',
     'EEE',
     'Architecture',
@@ -148,10 +135,10 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
     'Public Health',
     'Islamic History & Culture',
     'Civil Engineering',
-    'Electrical & Electronic Engineering',
+    
   ];
   final List<String> _programs = [
-    'all', 'BSc', 'MSc', 'BBA', 'MBA', 'LLB', 'LLM', 'BA', 'MA', 'B.Arch', 'M.Arch'
+    'All', 'BSc', 'MSc', 'BBA', 'MBA', 'LLB', 'LLM', 'BA', 'MA', 'B.Arch', 'M.Arch'
   ];
   final List<String> _priorities = ['normal', 'high', 'emergency'];
 
@@ -173,10 +160,18 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
     final data = await SupabaseService.getAnnouncements();
     if (mounted) {
       setState(() {
-      _announcements = data;
-      _loadingList = false;
-    });
+        _announcements = data;
+        _loadingList = false;
+      });
     }
+  }
+
+  Future<void> _openRichNoticeCenter() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AnnouncementsPage()),
+    );
+    if (mounted) await _loadAnnouncements();
   }
 
   Future<void> _post() async {
@@ -232,28 +227,92 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
 
   Widget _dropdown(String label, String value, List<String> items,
       void Function(String?) onChanged) {
+    final safeItems = items.toSet().toList();
+    final safeValue = safeItems.contains(value)
+        ? value
+        : (safeItems.contains('all') ? 'all' : safeItems.first);
+
     return DropdownButtonFormField<String>(
-      initialValue: value,
+      initialValue: safeValue,
       isExpanded: true,
-      iconSize: 20,
       decoration: InputDecoration(
         labelText: label,
         filled: true,
         fillColor: Colors.white,
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
-      items: items
-          .map((e) => DropdownMenuItem(
-              value: e,
-              child: Text(
-                e == 'all' ? 'All' : e,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13),
-              )))
+      items: safeItems
+          .map((e) => DropdownMenuItem<String>(
+                value: e,
+                child: Text(
+                  e == 'all' ? 'All' : e,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ))
           .toList(),
       onChanged: onChanged,
+    );
+  }
+
+  Widget _richNoticeShortcut() {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2ECC71).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.attach_file, color: Color(0xFF1E8449)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Notice with Media',
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                          color: const Color(0xFF123D35),
+                        ),
+                      ),
+                      const SizedBox(height: 3),  
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: OutlinedButton.icon(
+                onPressed: _openRichNoticeCenter,
+                icon: const Icon(Icons.add_photo_alternate_outlined),
+                label: const Text('Add Notice with Media'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF1E8449),
+                  side: const BorderSide(color: Color(0xFF1E8449)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -262,12 +321,20 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Post New Announcement',
+        Text('Admin Announcements',
             style: GoogleFonts.inter(
                 fontWeight: FontWeight.w700,
                 fontSize: 15,
                 color: const Color(0xFF2C3E50))),
         const SizedBox(height: 12),
+        _richNoticeShortcut(),
+        const SizedBox(height: 12),
+        Text('Quick Text Announcement',
+            style: GoogleFonts.inter(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: const Color(0xFF2C3E50))),
+        const SizedBox(height: 8),
         Card(
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14)),
@@ -300,60 +367,29 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
                         : null,
                   ),
                   const SizedBox(height: 10),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final narrow = constraints.maxWidth < 360;
-                      final dept = _dropdown('Department', _targetDept, _departments,
-                          (v) => setState(() => _targetDept = v!));
-                      final program = _dropdown('Program', _targetProgram, _programs,
-                          (v) => setState(() => _targetProgram = v!));
-                      if (narrow) {
-                        return Column(
-                          children: [dept, const SizedBox(height: 10), program],
-                        );
-                      }
-                      return Row(
-                        children: [
-                          Expanded(child: dept),
-                          const SizedBox(width: 10),
-                          Expanded(child: program),
-                        ],
-                      );
-                    },
-                  ),
+                  _dropdown('Department', _targetDept, _departments,
+                      (v) => setState(() => _targetDept = v ?? 'all')),
                   const SizedBox(height: 10),
-                  Row(
+                  _dropdown('Program', _targetProgram, _programs,
+                      (v) => setState(() => _targetProgram = v ?? 'all')),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: _priorities.map((p) {
                       final selected = _priority == p;
-                      return Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(() => _priority = p),
-                          child: Container(
-                            margin: EdgeInsets.only(
-                                right: p != _priorities.last ? 8 : 0),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 9),
-                            decoration: BoxDecoration(
-                              color: selected
-                                  ? _priorityColor(p)
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                  color: _priorityColor(p)),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              p[0].toUpperCase() + p.substring(1),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: selected
-                                    ? Colors.white
-                                    : _priorityColor(p),
-                              ),
-                            ),
-                          ),
+                      return ChoiceChip(
+                        label: Text(p[0].toUpperCase() + p.substring(1)),
+                        selected: selected,
+                        selectedColor: _priorityColor(p),
+                        backgroundColor: Colors.white,
+                        labelStyle: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: selected ? Colors.white : _priorityColor(p),
                         ),
+                        side: BorderSide(color: _priorityColor(p)),
+                        onSelected: (_) => setState(() => _priority = p),
                       );
                     }).toList(),
                   ),
@@ -418,7 +454,7 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
                 side: BorderSide(
-                    color: color.withOpacity( 0.5), width: 1),
+                    color: color.withValues(alpha: 0.5), width: 1),
               ),
               child: ListTile(
                 leading: CircleAvatar(
@@ -590,7 +626,7 @@ class _ComplaintsTabState extends State<_ComplaintsTab> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                     side: BorderSide(
-                        color: statusColor.withOpacity( 0.4),
+                        color: statusColor.withValues(alpha: 0.4),
                         width: 1),
                   ),
                   child: InkWell(
@@ -625,7 +661,7 @@ class _ComplaintsTabState extends State<_ComplaintsTab> {
                                     horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
                                   color: statusColor
-                                      .withOpacity( 0.12),
+                                      .withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(20),
                                   border:
                                       Border.all(color: statusColor),
@@ -721,9 +757,9 @@ class _ActionChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: color.withOpacity( 0.12),
+          color: color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity( 0.5)),
+          border: Border.all(color: color.withValues(alpha: 0.5)),
         ),
         child: Text(
           label,
@@ -927,8 +963,8 @@ class _BusesTabState extends State<_BusesTab> {
                             decoration: BoxDecoration(
                               color: online
                                   ? const Color(0xFF2ECC71)
-                                      .withOpacity( 0.12)
-                                  : Colors.grey.withOpacity( 0.1),
+                                      .withValues(alpha: 0.12)
+                                  : Colors.grey.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                 color: online

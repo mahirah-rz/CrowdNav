@@ -1,9 +1,10 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../auth/login_page.dart';
+import '../auth/register_page.dart';
 import '../services/supabase_service.dart';
 import '../widgets/input_field.dart';
 
@@ -45,14 +46,17 @@ class _ProfilePageState extends State<ProfilePage> {
     'Public Health',
     'Islamic History & Culture',
     'Civil Engineering',
-    'Electrical & Electronic Engineering',
+    
   ];
+
   final List<String> _programs = const [
     'BSc', 'MSc', 'BBA', 'MBA', 'LLB', 'LLM', 'BA', 'MA', 'B.Arch', 'M.Arch',
   ];
+
   final List<String> _bloodGroups = const [
     'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-',
   ];
+
   final List<String> _routes = const [
     'Route 1 – Tilagor',
     'Route 2 – Surma Tower',
@@ -60,11 +64,11 @@ class _ProfilePageState extends State<ProfilePage> {
     'Route 4 – Tilagor (via Bypass)',
   ];
 
+  bool get _isLoggedIn => Supabase.instance.client.auth.currentSession != null;
   String get _role => (_profile?['role'] ?? 'student').toString();
-  bool get _needsDepartment => _role == 'student' || _role == 'faculty' || (_role == 'office_staff' || _role == 'office staff');
+  bool get _needsDepartment => _role == 'student' || _role == 'faculty' || _role == 'office_staff' || _role == 'office staff';
   bool get _needsProgram => _role == 'student';
   bool get _needsRoute => _role == 'driver';
-  bool get _needsId => _role == 'student';
 
   @override
   void initState() {
@@ -82,6 +86,17 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _loadProfile() async {
     setState(() => _loading = true);
+
+    if (!_isLoggedIn) {
+      if (!mounted) return;
+      setState(() {
+        _profile = null;
+        _loading = false;
+        _editing = false;
+      });
+      return;
+    }
+
     try {
       final data = await SupabaseService.getProfileMap();
       if (!mounted) return;
@@ -125,7 +140,19 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  String get _idLabel => 'Student ID';
+  String get _idLabel {
+    switch (_role) {
+      case 'driver':
+        return 'Driver ID';
+      case 'faculty':
+        return 'Faculty ID';
+      case 'office_staff':
+      case 'office staff':
+        return 'Staff ID';
+      default:
+        return 'Student ID';
+    }
+  }
 
   void _enterEditMode() {
     if (_profile != null) _populateControllers(_profile!);
@@ -138,6 +165,8 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _pickAndUploadAvatar() async {
+    if (!_isLoggedIn) return;
+
     try {
       final picker = ImagePicker();
       final picked = await picker.pickImage(
@@ -145,10 +174,12 @@ class _ProfilePageState extends State<ProfilePage> {
         imageQuality: 75,
         maxWidth: 800,
       );
-      if (picked == null) return;
 
+      if (picked == null) return;
       setState(() => _uploadingAvatar = true);
-      final url = await SupabaseService.uploadAvatar(File(picked.path));
+
+      final bytes = await picked.readAsBytes();
+      final url = await SupabaseService.uploadAvatarBytes(bytes, picked.name);
       final fresh = await SupabaseService.getProfileMap();
 
       if (!mounted) return;
@@ -157,6 +188,7 @@ class _ProfilePageState extends State<ProfilePage> {
         _uploadingAvatar = false;
       });
       widget.onProfileUpdated?.call();
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile picture updated.'), backgroundColor: Color(0xFF2ECC71)),
       );
@@ -178,7 +210,7 @@ class _ProfilePageState extends State<ProfilePage> {
       final updates = <String, dynamic>{
         'name': _nameController.text.trim(),
         'phone': _phoneController.text.trim(),
-        'student_id': _needsId ? _idController.text.trim() : '',
+        'student_id': _idController.text.trim(),
         'department': _needsDepartment ? _selectedDept : '',
         'program': _needsProgram ? _selectedProgram : '',
         'blood_group': _selectedBlood,
@@ -190,7 +222,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
       if (!mounted) return;
       setState(() {
-        _profile = fresh ?? {...(_profile ?? <String, dynamic>{}), ...updates};
+        _profile = fresh ?? {...?_profile, ...updates};
         _editing = false;
         _saving = false;
       });
@@ -212,17 +244,33 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _logout() async {
     await SupabaseService.signOut();
     if (!mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-      (route) => false,
-    );
+    setState(() {
+      _profile = null;
+      _editing = false;
+    });
+    widget.onProfileUpdated?.call();
+  }
+
+  Future<void> _openLogin() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginPage()));
+    await _loadProfile();
+    widget.onProfileUpdated?.call();
+  }
+
+  Future<void> _openRegister() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterPage()));
+    await _loadProfile();
+    widget.onProfileUpdated?.call();
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator(color: Color(0xFF2ECC71)));
+    }
+
+    if (!_isLoggedIn) {
+      return _buildGuestProfile();
     }
 
     if (_profile == null) {
@@ -238,7 +286,7 @@ class _ProfilePageState extends State<ProfilePage> {
               const SizedBox(height: 8),
               const Text('Please complete registration again or ask admin to verify your account.', textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              ElevatedButton(onPressed: _logout, child: const Text('Back to Login')),
+              ElevatedButton(onPressed: _logout, child: const Text('Back to Home')),
             ],
           ),
         ),
@@ -268,9 +316,76 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Widget _buildGuestProfile() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [Color(0xFF123D35), Color(0xFF1E6B5C)]),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Column(
+            children: [
+              const CircleAvatar(
+                radius: 42,
+                backgroundColor: Colors.white,
+                child: Icon(Icons.person_outline, size: 46, color: Color(0xFF123D35)),
+              ),
+              const SizedBox(height: 14),
+              Text('Guest Mode', style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white)),
+              const SizedBox(height: 8),
+              const Text(
+                'Login/Register to access more features!',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: _openLogin,
+                    icon: const Icon(Icons.login),
+                    label: Text('Login', style: GoogleFonts.inter(fontWeight: FontWeight.w800)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    onPressed: _openRegister,
+                    icon: const Icon(Icons.person_add_alt_1),
+                    label: Text('Create New Account', style: GoogleFonts.inter(fontWeight: FontWeight.w800)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF1E8449),
+                      side: const BorderSide(color: Color(0xFF1E8449)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildHeader() {
     final name = (_profile?['name'] ?? 'User').toString();
     final role = _roleLabel(_role);
+    final avatarUrl = (_profile?['avatar_url'] ?? '').toString();
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -284,18 +399,10 @@ class _ProfilePageState extends State<ProfilePage> {
             alignment: Alignment.bottomRight,
             children: [
               CircleAvatar(
-                radius: 40,
+                radius: 42,
                 backgroundColor: Colors.white,
-                child: CircleAvatar(
-                  radius: 37,
-                  backgroundColor: const Color(0xFFEAF7F0),
-                  backgroundImage: ((_profile?['avatar_url'] ?? '').toString().isNotEmpty)
-                      ? NetworkImage((_profile?['avatar_url'] ?? '').toString())
-                      : null,
-                  child: ((_profile?['avatar_url'] ?? '').toString().isEmpty)
-                      ? const Icon(Icons.person, size: 42, color: Color(0xFF123D35))
-                      : null,
-                ),
+                backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+                child: avatarUrl.isEmpty ? const Icon(Icons.person, size: 42, color: Color(0xFF123D35)) : null,
               ),
               GestureDetector(
                 onTap: _uploadingAvatar ? null : _pickAndUploadAvatar,
@@ -303,11 +410,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   padding: const EdgeInsets.all(7),
                   decoration: const BoxDecoration(color: Color(0xFF2ECC71), shape: BoxShape.circle),
                   child: _uploadingAvatar
-                      ? const SizedBox(
-                          width: 15,
-                          height: 15,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
+                      ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.camera_alt, color: Colors.white, size: 15),
                 ),
               ),
@@ -318,7 +421,7 @@ class _ProfilePageState extends State<ProfilePage> {
           const SizedBox(height: 6),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.16), borderRadius: BorderRadius.circular(30)),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(30)),
             child: Text(role, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
           ),
           if (!_editing) ...[
@@ -331,7 +434,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 label: const Text('Edit Profile'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
-                  side: BorderSide(color: Colors.white.withOpacity(0.55)),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.55)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
               ),
@@ -356,7 +459,7 @@ class _ProfilePageState extends State<ProfilePage> {
         _buildCard('Personal Information', [
           _item(Icons.email_outlined, 'Email', email, locked: true),
           _item(Icons.phone_outlined, 'Phone', phone),
-          if (_needsId) _item(Icons.badge_outlined, _idLabel, id),
+          _item(Icons.badge_outlined, _idLabel, id),
         ]),
         if (_needsDepartment || _needsProgram)
           _buildCard('University Information', [
@@ -418,18 +521,15 @@ class _ProfilePageState extends State<ProfilePage> {
                 },
               ),
               const SizedBox(height: 10),
-              if (_needsId) ...[
-                InputField(
-                  controller: _idController,
-                  keyboardType: TextInputType.text,
-                  label: _idLabel,
-                  hint: 'Enter your student ID',
-                  icon: Icons.badge_outlined,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? '$_idLabel is required' : null,
-                ),
-                const SizedBox(height: 16),
-              ],
-              if (!_needsId) const SizedBox(height: 16),
+              InputField(
+                controller: _idController,
+                keyboardType: TextInputType.text,
+                label: _idLabel,
+                hint: 'Enter your university ID',
+                icon: Icons.badge_outlined,
+                validator: (v) => (v == null || v.trim().isEmpty) ? '$_idLabel is required' : null,
+              ),
+              const SizedBox(height: 16),
               if (_needsDepartment) ...[
                 _buildDropdown(label: 'Department / Office', value: _selectedDept, items: _departments, icon: Icons.school_outlined, onChanged: (v) => setState(() => _selectedDept = v!)),
                 const SizedBox(height: 10),
@@ -470,26 +570,15 @@ class _ProfilePageState extends State<ProfilePage> {
     required void Function(String?) onChanged,
   }) {
     return DropdownButtonFormField<String>(
-      initialValue: items.contains(value) ? value : items.first,
-      isExpanded: true,
-      iconSize: 20,
+      value: items.contains(value) ? value : items.first,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFF123D35)),
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
       ),
-      selectedItemBuilder: (context) => items
-          .map((e) => Align(
-                alignment: Alignment.centerLeft,
-                child: Text(e, overflow: TextOverflow.ellipsis, maxLines: 1),
-              ))
-          .toList(),
-      items: items
-          .map((e) => DropdownMenuItem(value: e, child: Text(e, overflow: TextOverflow.ellipsis, maxLines: 1)))
-          .toList(),
+      items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
       onChanged: onChanged,
       validator: (v) => (v == null || v.isEmpty) ? 'Please select $label' : null,
     );

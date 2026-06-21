@@ -1,25 +1,34 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'auth/auth_gate.dart';
+import 'firebase_options.dart';
 import 'pages/announcements_page.dart';
 import 'pages/bus_tracking_page.dart';
 import 'pages/complaint_page.dart';
 import 'services/notification_service.dart';
-import 'firebase_options.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  var firebaseReady = false;
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    firebaseReady = true;
+    if (!kIsWeb) {
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    }
+  } catch (e) {
+    debugPrint('Firebase initialization skipped/failed: $e');
+  }
 
   await Supabase.initialize(
     url: 'https://kqsaszkjqbbfhkjmofmw.supabase.co',
@@ -27,7 +36,13 @@ Future<void> main() async {
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtxc2FzemtqcWJiZmhram1vZm13Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4MjQ5MzAsImV4cCI6MjA5MzQwMDkzMH0.1i8NpPJ1TqlumuKtJbfUH9j3qjRHqym_gkkJxRb0Qmw',
   );
 
-  await NotificationService.initialize(navigatorKey: navigatorKey);
+  if (firebaseReady) {
+    try {
+      await NotificationService.initialize(navigatorKey: navigatorKey);
+    } catch (e) {
+      debugPrint('Notification initialization skipped/failed: $e');
+    }
+  }
 
   runApp(const CrowdNavApp());
 }

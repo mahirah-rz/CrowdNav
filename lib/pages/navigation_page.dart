@@ -30,6 +30,7 @@ const _nodes = {
   'Gallery 3 (RAB 3rd Floor)': LatLng(24.869425225144486, 91.80492469408534),
   'Bangla Dept (RKB 4th Floor)': LatLng(24.869725, 91.804873),
   'THM Dept (RKB 4th Floor)': LatLng(24.869746, 91.804683),
+  'Lift (RAB Ground Floor)': LatLng(24.8697078, 91.805354),
 };
 
 final _edges = <String, Map<String, double>>{
@@ -145,6 +146,9 @@ final _edges = <String, Map<String, double>>{
   'THM Dept (RKB 4th Floor)': {
     'RKB (Rabeya Khatun Bldg)': 0.4,
   },
+  'Lift (RAB Ground Floor)': {
+    'RAB (Ragib Ali Bldg)': 0.1,
+  },
 };
 
 final _crowdScore = <String, double>{
@@ -156,7 +160,7 @@ final _crowdScore = <String, double>{
   'LU Cafeteria': 0.9,
   'LU Kodom Tola': 0.6,
   'Civil Engineering Workshop': 0.3,
-  'Mojo Shop': 0.7,
+  'Break Station': 0.7,
   'CSE Dept (RAB 3rd Floor)': 0.6,
   'Library (RAB 2nd Floor)': 0.2,
   'EEE Dept (RAB 2nd Floor)': 0.5,
@@ -172,6 +176,7 @@ final _crowdScore = <String, double>{
   'Gallery 3 (RAB 3rd Floor)': 0.3,
   'Bangla Dept (RKB 4th Floor)': 0.4,
   'THM Dept (RKB 4th Floor)': 0.4,
+  'Lift (RAB Ground Floor)': 0.3,
 };
 
 
@@ -400,8 +405,8 @@ class _NavigationPageState extends State<NavigationPage> {
                   children: [
                     Text(
                       _avoidCrowd
-                          ? 'Crowd-Aware Route (Dijkstra)'
-                          : 'Shortest Path (Dijkstra)',
+                          ? 'Crowd-Aware Route'
+                          : 'Shortest Path',
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.bold,
                         color: const Color(0xFF2ECC71),

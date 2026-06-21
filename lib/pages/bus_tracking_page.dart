@@ -236,7 +236,7 @@ class _BusTrackingPageState extends State<BusTrackingPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      color: hasLive ? const Color(0xFF2ECC71).withOpacity(0.12) : Colors.orange.withOpacity(0.12),
+      color: hasLive ? const Color(0xFF2ECC71).withValues(alpha:0.12) : Colors.orange.withValues(alpha:0.12),
       child: Row(
         children: [
           Icon(hasLive ? Icons.sensors : Icons.info_outline, size: 16, color: hasLive ? const Color(0xFF123D35) : Colors.orange.shade800),
@@ -291,7 +291,7 @@ class _BusTrackingPageState extends State<BusTrackingPage> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(8),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.14), blurRadius: 6)],
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.14), blurRadius: 6)],
                 ),
                 child: Column(
                   children: [
@@ -306,7 +306,7 @@ class _BusTrackingPageState extends State<BusTrackingPage> {
                 color: online ? Colors.redAccent : Colors.grey,
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.22), blurRadius: 6, offset: const Offset(0, 2))],
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha:0.22), blurRadius: 6, offset: const Offset(0, 2))],
               ),
               child: const Icon(Icons.directions_bus, color: Colors.white, size: 19),
             ),

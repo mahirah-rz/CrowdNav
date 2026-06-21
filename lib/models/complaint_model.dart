@@ -1,3 +1,5 @@
+import 'app_attachment.dart';
+
 class ComplaintModel {
   final String id;
   final String userId;
@@ -10,6 +12,7 @@ class ComplaintModel {
   final String status;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final List<AppAttachment> attachments;
 
   const ComplaintModel({
     required this.id,
@@ -23,21 +26,23 @@ class ComplaintModel {
     required this.status,
     required this.createdAt,
     required this.updatedAt,
+    this.attachments = const [],
   });
 
-  factory ComplaintModel.fromMap(Map<String, dynamic> map) {
+  factory ComplaintModel.fromMap(Map<String, dynamic> map, {List<AppAttachment> attachments = const []}) {
     return ComplaintModel(
-      id: map['id'] ?? '',
-      userId: map['user_id'] ?? '',
-      userName: map['user_name'] ?? 'Unknown',
-      userDepartment: map['user_department'] ?? '',
-      category: map['category'] ?? 'general',
-      subject: map['subject'] ?? '',
-      description: map['description'] ?? '',
-      priority: map['priority'] ?? 'normal',
-      status: map['status'] ?? 'pending',
-      createdAt: DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),
-      updatedAt: DateTime.tryParse(map['updated_at'] ?? '') ?? DateTime.now(),
+      id: (map['id'] ?? '').toString(),
+      userId: (map['user_id'] ?? '').toString(),
+      userName: (map['user_name'] ?? 'Unknown').toString(),
+      userDepartment: (map['user_department'] ?? '').toString(),
+      category: (map['category'] ?? 'general').toString(),
+      subject: (map['subject'] ?? '').toString(),
+      description: (map['description'] ?? '').toString(),
+      priority: (map['priority'] ?? 'normal').toString(),
+      status: (map['status'] ?? 'pending').toString(),
+      createdAt: DateTime.tryParse((map['created_at'] ?? '').toString()) ?? DateTime.now(),
+      updatedAt: DateTime.tryParse((map['updated_at'] ?? '').toString()) ?? DateTime.now(),
+      attachments: attachments,
     );
   }
 }
@@ -50,6 +55,7 @@ class ComplaintReply {
   final String senderRole;
   final String message;
   final DateTime createdAt;
+  final List<AppAttachment> attachments;
 
   const ComplaintReply({
     required this.id,
@@ -59,17 +65,19 @@ class ComplaintReply {
     required this.senderRole,
     required this.message,
     required this.createdAt,
+    this.attachments = const [],
   });
 
-  factory ComplaintReply.fromMap(Map<String, dynamic> map) {
+  factory ComplaintReply.fromMap(Map<String, dynamic> map, {List<AppAttachment> attachments = const []}) {
     return ComplaintReply(
-      id: map['id'] ?? '',
-      complaintId: map['complaint_id'] ?? '',
-      senderId: map['sender_id'] ?? '',
-      senderName: map['sender_name'] ?? 'Unknown',
-      senderRole: map['sender_role'] ?? 'student',
-      message: map['message'] ?? '',
-      createdAt: DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),
+      id: (map['id'] ?? '').toString(),
+      complaintId: (map['complaint_id'] ?? '').toString(),
+      senderId: (map['sender_id'] ?? '').toString(),
+      senderName: (map['sender_name'] ?? 'Unknown').toString(),
+      senderRole: (map['sender_role'] ?? 'student').toString(),
+      message: (map['message'] ?? '').toString(),
+      createdAt: DateTime.tryParse((map['created_at'] ?? '').toString()) ?? DateTime.now(),
+      attachments: attachments,
     );
   }
 }

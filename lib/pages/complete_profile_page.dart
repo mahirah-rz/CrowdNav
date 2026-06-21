@@ -35,7 +35,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
   final List<String> _departments = const [
     'CSE', 'EEE', 'Architecture', 'Business Administration', 'English',
     'Law', 'Bangla', 'Tourism & Hospitality Management', 'Public Health',
-    'Islamic History & Culture', 'Civil Engineering', 'Electrical & Electronic Engineering',
+    'Islamic History & Culture', 'Civil Engineering',
   ];
   final List<String> _programs = const [
     'BSc', 'MSc', 'BBA', 'MBA', 'LLB', 'LLM', 'BA', 'MA', 'B.Arch', 'M.Arch',

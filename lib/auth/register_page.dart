@@ -154,8 +154,7 @@ class _RegisterPageState extends State<RegisterPage> {
         emailRedirectTo: 'io.crowdnav.app://login-callback/',
       );
 
-      // If email confirmation is disabled, Supabase returns a session immediately.
-      // If confirmation is enabled, the database trigger creates the profile from metadata.
+      
       if (authResponse.session != null) {
         await SupabaseService.upsertProfile(metadata);
       }
