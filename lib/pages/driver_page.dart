@@ -1,12 +1,19 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
-import '../services/supabase_service.dart';
+
+import 'home_page.dart';
 import '../models/user_model.dart';
-import '../auth/login_page.dart';
+import '../services/supabase_service.dart';
+import 'announcements_page.dart';
+import 'complaint_page.dart';
+import 'profile_page.dart';
+import 'safety_page.dart';
+import 'weather_page.dart';
 
 class DriverPage extends StatefulWidget {
   const DriverPage({super.key});
@@ -18,16 +25,16 @@ class DriverPage extends StatefulWidget {
 class _DriverPageState extends State<DriverPage> {
   UserModel? _driver;
   bool _loadingProfile = true;
-
   bool _isBroadcasting = false;
   Position? _currentPosition;
   StreamSubscription<Position>? _positionStream;
   Timer? _uploadTimer;
   String? _errorMessage;
   DateTime? _lastUpload;
+  int _currentIndex = 0;
 
   String _selectedRoute = 'Route 1 – Tilagor';
-  final List<String> _routes = [
+  final List<String> _routes = const [
     'Route 1 – Tilagor',
     'Route 2 – Surma Tower',
     'Route 3 – Lakkatura',
@@ -44,28 +51,26 @@ class _DriverPageState extends State<DriverPage> {
 
   @override
   void dispose() {
-    _stopBroadcasting();
+    _stopBroadcasting(updateUi: false);
     super.dispose();
   }
 
   Future<void> _loadProfile() async {
     final user = await SupabaseService.getProfile();
-    if (mounted) {
-      setState(() {
-        _driver = user;
-        if (user?.assignedRoute != null && _routes.contains(user!.assignedRoute)) {
-          _selectedRoute = user.assignedRoute!;
-        }
-        _loadingProfile = false;
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      _driver = user;
+      if (user?.assignedRoute != null && _routes.contains(user!.assignedRoute)) {
+        _selectedRoute = user.assignedRoute!;
+      }
+      _loadingProfile = false;
+    });
   }
 
   Future<bool> _checkPermission() async {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      setState(() => _errorMessage =
-          'Location services are disabled. Please enable GPS.');
+      setState(() => _errorMessage = 'Location services are disabled. Please enable GPS.');
       return false;
     }
 
@@ -79,8 +84,7 @@ class _DriverPageState extends State<DriverPage> {
     }
 
     if (permission == LocationPermission.deniedForever) {
-      setState(() => _errorMessage =
-          'Location permission permanently denied. Enable it in device settings.');
+      setState(() => _errorMessage = 'Location permission permanently denied. Enable it in device settings.');
       return false;
     }
 
@@ -89,7 +93,6 @@ class _DriverPageState extends State<DriverPage> {
 
   Future<void> _startBroadcasting() async {
     setState(() => _errorMessage = null);
-
     final hasPermission = await _checkPermission();
     if (!hasPermission) return;
 
@@ -97,9 +100,7 @@ class _DriverPageState extends State<DriverPage> {
 
     try {
       final firstPosition = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
       );
       if (mounted) {
         setState(() => _currentPosition = firstPosition);
@@ -107,6 +108,7 @@ class _DriverPageState extends State<DriverPage> {
       }
     } catch (_) {}
 
+    _positionStream?.cancel();
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
@@ -116,10 +118,7 @@ class _DriverPageState extends State<DriverPage> {
       (position) {
         if (mounted) {
           setState(() => _currentPosition = position);
-          _mapController.move(
-            LatLng(position.latitude, position.longitude),
-            16,
-          );
+          _mapController.move(LatLng(position.latitude, position.longitude), 16);
         }
         _uploadLocation(position);
       },
@@ -133,6 +132,7 @@ class _DriverPageState extends State<DriverPage> {
       },
     );
 
+    _uploadTimer?.cancel();
     _uploadTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
       final position = _currentPosition;
       if (position != null) await _uploadLocation(position);
@@ -157,26 +157,53 @@ class _DriverPageState extends State<DriverPage> {
     }
   }
 
-  void _stopBroadcasting() {
+  void _stopBroadcasting({bool updateUi = true}) {
     _positionStream?.cancel();
     _positionStream = null;
     _uploadTimer?.cancel();
     _uploadTimer = null;
-
     if (_driver != null) {
       SupabaseService.clearBusLocation(_driver!.id);
     }
-
-    if (mounted) setState(() => _isBroadcasting = false);
+    if (updateUi && mounted) {
+      setState(() {
+        _isBroadcasting = false;
+        _currentPosition = null;
+      });
+    }
   }
 
-  Future<void> _signOut() async {
+  Future<void> _confirmLogout() async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout?'),
+        content: const Text('Do you want to logout from the driver portal?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.logout),
+            label: const Text('Logout'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1E8449),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLogout != true) return;
     _stopBroadcasting();
     await SupabaseService.signOut();
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const LoginPage()),
+      MaterialPageRoute(builder: (_) => const HomePage()),
       (route) => false,
     );
   }
@@ -199,30 +226,77 @@ class _DriverPageState extends State<DriverPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFECF0F1),
-      appBar: AppBar(
-        title: Text('Driver Portal', style: GoogleFonts.inter()),
-        backgroundColor: const Color(0xFF1E8449),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-            onPressed: _signOut,
-          ),
-        ],
-      ),
-      body: Column(
+      appBar: _currentIndex == 0
+          ? AppBar(
+              title: Text('Driver Portal', style: GoogleFonts.inter()),
+              backgroundColor: const Color(0xFF1E8449),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.logout),
+                  tooltip: 'Logout',
+                  onPressed: _confirmLogout,
+                ),
+              ],
+            )
+          : null,
+      body: IndexedStack(
+        index: _currentIndex,
         children: [
-          _buildStatusBanner(),
-          Expanded(
-            child: _currentPosition == null
-                ? _buildIdleView()
-                : _buildMapView(),
-          ),
-          _buildControlPanel(),
+          _buildBroadcastTab(),
+          const AnnouncementsPage(),
+          const WeatherPage(),
+          const SafetyPage(),
+          const ComplaintPage(),
+          ProfilePage(onProfileUpdated: _loadProfile),
         ],
       ),
+      bottomNavigationBar: NavigationBar(
+        height: 70,
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) => setState(() => _currentIndex = index),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.gps_fixed), label: 'Live'),
+          NavigationDestination(icon: Icon(Icons.campaign_outlined), label: 'Notice'),
+          NavigationDestination(icon: Icon(Icons.cloud_outlined), label: 'Weather'),
+          NavigationDestination(icon: Icon(Icons.emergency_outlined), label: 'SOS'),
+          NavigationDestination(icon: Icon(Icons.report_problem_outlined), label: 'Help'),
+          NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBroadcastTab() {
+    return Column(
+      children: [
+        _buildStatusBanner(),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+            child: Column(
+              children: [
+                _buildDriverCard(),
+                const SizedBox(height: 22),
+                _buildRouteSelector(),
+                if (_errorMessage != null) ...[
+                  const SizedBox(height: 16),
+                  _buildErrorBox(),
+                ],
+                const SizedBox(height: 22),
+                if (_currentPosition != null) ...[
+                  _buildMapCard(),
+                  const SizedBox(height: 22),
+                ],
+                _buildStartStopButton(),
+                const SizedBox(height: 16),
+                _buildHint(),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -232,8 +306,8 @@ class _DriverPageState extends State<DriverPage> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       color: _isBroadcasting
-          ? const Color(0xFF2ECC71).withOpacity( 0.15)
-          : Colors.grey.withOpacity( 0.1),
+          ? const Color(0xFF2ECC71).withValues(alpha: 0.15)
+          : Colors.grey.withValues(alpha: 0.1),
       child: Row(
         children: [
           Container(
@@ -245,19 +319,18 @@ class _DriverPageState extends State<DriverPage> {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            _isBroadcasting
-                ? 'Broadcasting live location'
-                : 'Location sharing is OFF',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: _isBroadcasting
-                  ? const Color(0xFF1E8449)
-                  : Colors.grey[600],
+          Expanded(
+            child: Text(
+              _isBroadcasting ? 'Broadcasting live location' : 'Location sharing is OFF',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: _isBroadcasting ? const Color(0xFF1E8449) : Colors.grey[600],
+              ),
             ),
           ),
-          const Spacer(),
           if (_isBroadcasting)
             Text(
               'Last sync: ${_formatTime(_lastUpload)}',
@@ -268,150 +341,129 @@ class _DriverPageState extends State<DriverPage> {
     );
   }
 
-  Widget _buildIdleView() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+  Widget _buildDriverCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
         children: [
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                CircleAvatar(
-                  radius: 36,
-                  backgroundColor:
-                      const Color(0xFF2ECC71).withValues(alpha: 0.15),
-                  child: const Icon(
-                    Icons.directions_bus_rounded,
-                    size: 40,
-                    color: Color(0xFF1E8449),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  _driver?.name ?? 'Driver',
-                  style: GoogleFonts.inter(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF2C3E50),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2ECC71).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'DRIVER',
-                    style: TextStyle(
-                      color: Color(0xFF1E8449),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ),
-              ],
+          CircleAvatar(
+            radius: 36,
+            backgroundColor: const Color(0xFF2ECC71).withValues(alpha: 0.15),
+            backgroundImage: (_driver?.avatarUrl ?? '').isNotEmpty
+                ? NetworkImage(_driver!.avatarUrl!)
+                : null,
+            child: (_driver?.avatarUrl ?? '').isEmpty
+                ? const Icon(Icons.directions_bus_rounded, size: 40, color: Color(0xFF1E8449))
+                : null,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            _driver?.name ?? 'Driver',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF2C3E50),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 4),
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
+              color: const Color(0xFF2ECC71).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(20),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Select Your Route',
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF2C3E50),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedRoute,
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: const Color(0xFFECF0F1),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                    prefixIcon: const Icon(Icons.route,
-                        color: Color(0xFF1E8449)),
-                  ),
-                  items: _routes
-                      .map((r) =>
-                          DropdownMenuItem(value: r, child: Text(r)))
-                      .toList(),
-                  onChanged: _isBroadcasting
-                      ? null
-                      : (v) => setState(() => _selectedRoute = v!),
-                ),
-              ],
+            child: const Text(
+              'DRIVER',
+              style: TextStyle(
+                color: Color(0xFF1E8449),
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                letterSpacing: 1,
+              ),
             ),
           ),
-          if (_errorMessage != null) ...[
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.redAccent.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: Colors.redAccent.withValues(alpha: 0.4),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded,
-                      color: Colors.redAccent, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _errorMessage!,
-                      style: const TextStyle(
-                        color: Colors.redAccent,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 32),
-          _buildStartStopButton(),
         ],
       ),
     );
   }
 
-  Widget _buildMapView() {
-    final pos = _currentPosition!;
+  Widget _buildRouteSelector() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Select Your Route',
+            style: GoogleFonts.inter(
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF2C3E50),
+            ),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            value: _routes.contains(_selectedRoute) ? _selectedRoute : _routes.first,
+            isExpanded: true,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: const Color(0xFFECF0F1),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+              prefixIcon: const Icon(Icons.route, color: Color(0xFF1E8449)),
+            ),
+            selectedItemBuilder: (context) => _routes
+                .map(
+                  (route) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(route, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(),
+            items: _routes
+                .map(
+                  (route) => DropdownMenuItem(
+                    value: route,
+                    child: Text(route, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(),
+            onChanged: _isBroadcasting
+                ? null
+                : (value) => setState(() => _selectedRoute = value ?? _routes.first),
+          ),
+        ],
+      ),
+    );
+  }
 
-    return Stack(
-      children: [
-        FlutterMap(
+  Widget _buildMapCard() {
+    final pos = _currentPosition!;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: SizedBox(
+        height: 280,
+        child: FlutterMap(
           mapController: _mapController,
           options: MapOptions(
             initialCenter: LatLng(pos.latitude, pos.longitude),
@@ -436,26 +488,15 @@ class _DriverPageState extends State<DriverPage> {
                           color: Color(0xFF1E8449),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
-                          Icons.directions_bus,
-                          color: Colors.white,
-                          size: 22,
-                        ),
+                        child: const Icon(Icons.directions_bus, color: Colors.white, size: 22),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: const Color(0xFF1E8449),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Text(
-                          'You',
-                          style:
-                              TextStyle(color: Colors.white, fontSize: 9),
-                        ),
+                        child: const Text('You', style: TextStyle(color: Colors.white, fontSize: 9)),
                       ),
                     ],
                   ),
@@ -464,139 +505,25 @@ class _DriverPageState extends State<DriverPage> {
             ),
           ],
         ),
-        Positioned(
-          top: 12,
-          left: 12,
-          right: 12,
-          child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 8,
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.route, color: Color(0xFF1E8449), size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _selectedRoute,
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      color: const Color(0xFF2C3E50),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        Positioned(
-          bottom: 12,
-          left: 12,
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 6,
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _coordRow('LAT', pos.latitude.toStringAsFixed(6)),
-                const SizedBox(height: 2),
-                _coordRow('LNG', pos.longitude.toStringAsFixed(6)),
-                const SizedBox(height: 2),
-                _coordRow('ACC', '±${pos.accuracy.toStringAsFixed(0)}m'),
-                if (pos.speed >= 0) ...[
-                  const SizedBox(height: 2),
-                  _coordRow(
-                    'SPD',
-                    '${(pos.speed * 3.6).toStringAsFixed(1)} km/h',
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _coordRow(String label, String value) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: 32,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 10,
-              color: Colors.grey,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 11,
-            color: Color(0xFF2C3E50),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildControlPanel() {
+  Widget _buildErrorBox() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-      color: Colors.white,
-      child: Column(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.redAccent.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+      ),
+      child: Row(
         children: [
-          if (_currentPosition != null && _isBroadcasting)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: DropdownButtonFormField<String>(
-                initialValue: _selectedRoute,
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: const Color(0xFFECF0F1),
-                  isDense: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                  prefixIcon: const Icon(Icons.route,
-                      color: Color(0xFF1E8449), size: 18),
-                ),
-                items: _routes
-                    .map((r) => DropdownMenuItem(
-                          value: r,
-                          child: Text(r,
-                              style: const TextStyle(fontSize: 13)),
-                        ))
-                    .toList(),
-                onChanged: (v) => setState(() => _selectedRoute = v!),
-              ),
-            ),
-          _buildStartStopButton(),
+          const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(_errorMessage!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+          ),
         ],
       ),
     );
@@ -607,29 +534,29 @@ class _DriverPageState extends State<DriverPage> {
       width: double.infinity,
       height: 52,
       child: ElevatedButton.icon(
-        onPressed:
-            _isBroadcasting ? _stopBroadcasting : _startBroadcasting,
-        icon: Icon(
-          _isBroadcasting
-              ? Icons.stop_circle_outlined
-              : Icons.gps_fixed,
-          size: 22,
-        ),
+        onPressed: _isBroadcasting ? () => _stopBroadcasting() : _startBroadcasting,
+        icon: Icon(_isBroadcasting ? Icons.stop_circle_outlined : Icons.gps_fixed, size: 22),
         label: Text(
           _isBroadcasting ? 'Stop Broadcasting' : 'Start Broadcasting',
           style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700),
         ),
         style: ElevatedButton.styleFrom(
-          backgroundColor: _isBroadcasting
-              ? Colors.redAccent
-              : const Color(0xFF2ECC71),
+          backgroundColor: _isBroadcasting ? Colors.redAccent : const Color(0xFF2ECC71),
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           elevation: 2,
         ),
       ),
+    );
+  }
+
+  Widget _buildHint() {
+    return Text(
+      _isBroadcasting
+          ? 'Keep this page while sharing location.'
+          : 'Choose your route and start broadcasting when the bus starts.',
+      textAlign: TextAlign.center,
+      style: GoogleFonts.inter(color: Colors.black54, fontWeight: FontWeight.w600),
     );
   }
 }

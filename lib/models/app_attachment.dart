@@ -23,7 +23,7 @@ class AppAttachment {
   final String id;
   final String ownerId;
   final String? replyId;
-  final String kind; 
+  final String kind;
   final String fileName;
   final String fileUrl;
   final String mimeType;
@@ -48,7 +48,7 @@ class AppAttachment {
   bool get isLink => kind == 'link';
   bool get isFile => kind == 'file';
 
-  factory AppAttachment.fromMap(Map<String, dynamic> map) {
+  factory AppAttachment.fromMap(Map map) {
     return AppAttachment(
       id: (map['id'] ?? '').toString(),
       ownerId: (map['announcement_id'] ?? map['complaint_id'] ?? '').toString(),
@@ -57,9 +57,12 @@ class AppAttachment {
       fileName: (map['file_name'] ?? 'Attachment').toString(),
       fileUrl: (map['file_url'] ?? '').toString(),
       mimeType: (map['mime_type'] ?? '').toString(),
-      fileSize: map['file_size'] is int ? map['file_size'] as int : int.tryParse('${map['file_size'] ?? 0}') ?? 0,
+      fileSize: map['file_size'] is int
+          ? map['file_size'] as int
+          : int.tryParse('${map['file_size'] ?? 0}') ?? 0,
       storagePath: (map['storage_path'] ?? '').toString(),
-      createdAt: DateTime.tryParse((map['created_at'] ?? '').toString()) ?? DateTime.now(),
+      createdAt: DateTime.tryParse((map['created_at'] ?? '').toString()) ??
+          DateTime.now(),
     );
   }
 }

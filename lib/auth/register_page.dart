@@ -14,6 +14,9 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
+  static const String _emailConfirmedRedirectUrl =
+      'https://mahirah-rz.github.io/CrowdNav/email-confirmed.html';
+
   final _formKey = GlobalKey<FormState>();
 
   final _nameController = TextEditingController();
@@ -130,33 +133,34 @@ class _RegisterPageState extends State<RegisterPage> {
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final email = _emailController.text.trim().toLowerCase();
-    final metadata = <String, dynamic>{
-      'name': _nameController.text.trim(),
-      'email': email,
-      'phone': _phoneController.text.trim(),
-      'role': _selectedRole,
-      'student_id': _needsStudentId ? _studentIdController.text.trim() : '',
-      'department': _needsDepartment ? _selectedDepartment : '',
-      'program': _needsProgram ? _selectedProgram : '',
-      'office_section': _needsOfficeSection ? _selectedOfficeSection : '',
-      'assigned_route': _needsRoute ? _assignedRoute : '',
-      'blood_group': _selectedBloodGroup,
-    };
-
     setState(() => _isLoading = true);
 
     try {
       final authResponse = await Supabase.instance.client.auth.signUp(
-        email: email,
+        email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
-        data: metadata,
-        emailRedirectTo: 'io.crowdnav.app://login-callback/',
+        emailRedirectTo: _emailConfirmedRedirectUrl,
       );
 
-      
-      if (authResponse.session != null) {
-        await SupabaseService.upsertProfile(metadata);
+      final user = authResponse.user;
+
+      if (user != null) {
+        await Supabase.instance.client.from('profiles').upsert({
+          'id': user.id,
+          'name': _nameController.text.trim(),
+          'email': _emailController.text.trim(),
+          'phone': _phoneController.text.trim(),
+          'role': _selectedRole,
+          'student_id':
+              _needsStudentId ? _studentIdController.text.trim() : null,
+          'department': _needsDepartment ? _selectedDepartment : null,
+          'program': _needsProgram ? _selectedProgram : null,
+          'office_section':
+              _needsOfficeSection ? _selectedOfficeSection : null,
+          'assigned_route': _needsRoute ? _assignedRoute : null,
+          'blood_group': _selectedBloodGroup,
+          'updated_at': DateTime.now().toIso8601String(),
+        }, onConflict: 'id');
       }
 
       if (!mounted) return;
@@ -170,7 +174,7 @@ class _RegisterPageState extends State<RegisterPage> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Account created. Please confirm your email, then log in.'),
+            content: Text('Account created. Please confirm your email.'),
             backgroundColor: Color(0xFF2ECC71),
           ),
         );
@@ -184,7 +188,10 @@ class _RegisterPageState extends State<RegisterPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Registration failed: $e'), backgroundColor: Colors.redAccent),
+        SnackBar(
+          content: Text('Registration failed: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -198,35 +205,37 @@ class _RegisterPageState extends State<RegisterPage> {
     required void Function(String?) onChanged,
     String Function(String)? display,
   }) {
+    final safeValue = items.contains(value) ? value : items.first;
     return DropdownButtonFormField<String>(
-      initialValue: items.contains(value) ? value : items.first,
+      initialValue: safeValue,
       isExpanded: true,
-      iconSize: 20,
       decoration: InputDecoration(
         labelText: label,
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       ),
       selectedItemBuilder: (context) => items
-          .map((e) => Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  display == null ? e : display(e),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
-              ))
+          .map(
+            (item) => Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                display == null ? item : display(item),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
           .toList(),
       items: items
           .map(
-            (e) => DropdownMenuItem(
-              value: e,
+            (item) => DropdownMenuItem(
+              value: item,
               child: Text(
-                display == null ? e : display(e),
-                overflow: TextOverflow.ellipsis,
+                display == null ? item : display(item),
                 maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           )
@@ -291,7 +300,12 @@ class _RegisterPageState extends State<RegisterPage> {
                       value: _selectedRole,
                       items: _roles,
                       display: _roleLabel,
-                      onChanged: (v) => setState(() => _selectedRole = v!),
+                      onChanged: (v) => setState(() {
+                        _selectedRole = v!;
+                        if (_selectedRole != 'student') {
+                          _studentIdController.clear();
+                        }
+                      }),
                     ),
 
                     const SizedBox(height: 16),

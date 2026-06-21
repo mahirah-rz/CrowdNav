@@ -4,7 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'register_page.dart';
 import 'forgotpassword_page.dart';
 import 'auth_gate.dart';
-import '../pages/complete_profile_page.dart';
 import '../services/google_auth_service.dart';
 import '../widgets/input_field.dart';
 
@@ -62,40 +61,12 @@ class _LoginPageState extends State<LoginPage> {
       final response = await GoogleAuthService.signInWithGoogle();
       if (response == null || !mounted) return;
 
-      final user = response.user!;
-      final existing = await Supabase.instance.client
-          .from('profiles')
-          .select()
-          .eq('id', user.id)
-          .maybeSingle();
-
-      if (!mounted) return;
-
-      final needsProfile = existing == null ||
-          (existing['name'] ?? '').toString().trim().isEmpty ||
-          (existing['phone'] ?? '').toString().trim().isEmpty ||
-          (existing['student_id'] ?? '').toString().trim().isEmpty;
-
-      if (needsProfile) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(
-            builder: (_) => CompleteProfilePage(
-              email: user.email ?? '',
-              name: user.userMetadata?['full_name']?.toString() ??
-                  user.userMetadata?['name']?.toString() ??
-                  '',
-            ),
-          ),
-          (route) => false,
-        );
-      } else {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const AuthGate()),
-          (route) => false,
-        );
-      }
+      
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const AuthGate()),
+        (route) => false,
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

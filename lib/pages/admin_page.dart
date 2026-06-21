@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../models/announcement_model.dart';
+import '../models/app_attachment.dart';
 import '../models/complaint_model.dart';
 import '../models/user_model.dart';
 import '../services/supabase_service.dart';
 import '../auth/login_page.dart';
 import '../widgets/input_field.dart';
+import '../widgets/attachment_picker_panel.dart';
+import '../widgets/attachment_viewer.dart';
 import 'complaint_detail_page.dart';
-import 'announcements_page.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -40,7 +42,31 @@ class _AdminPageState extends State<AdminPage>
     if (mounted) setState(() => _admin = user);
   }
 
-  Future<void> _signOut() async {
+  Future<void> _confirmSignOut() async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout?'),
+        content: const Text('Do you want to logout from the admin panel?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.logout),
+            label: const Text('Logout'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1E8449),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLogout != true) return;
     await SupabaseService.signOut();
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
@@ -73,7 +99,7 @@ class _AdminPageState extends State<AdminPage>
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
-            onPressed: _signOut,
+            onPressed: _confirmSignOut,
           ),
         ],
         bottom: TabBar(
@@ -102,6 +128,7 @@ class _AdminPageState extends State<AdminPage>
   }
 }
 
+
 class _AnnouncementsTab extends StatefulWidget {
   const _AnnouncementsTab();
 
@@ -113,16 +140,18 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _bodyController = TextEditingController();
+  final List<PickedAttachment> _files = [];
+  final List<NoticeLink> _links = [];
 
-  String _targetDept = 'all';
-  String _targetProgram = 'all';
-  String _priority = 'normal';
+  String _targetDept = 'All';
+  String _targetProgram = 'All';
+  String _priority = 'Normal';
   bool _posting = false;
 
   List<Announcement> _announcements = [];
   bool _loadingList = true;
 
-  final List<String> _departments = [
+  final List<String> _departments = const [
     'All',
     'CSE',
     'EEE',
@@ -137,10 +166,22 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
     'Civil Engineering',
     
   ];
-  final List<String> _programs = [
-    'All', 'BSc', 'MSc', 'BBA', 'MBA', 'LLB', 'LLM', 'BA', 'MA', 'B.Arch', 'M.Arch'
+
+  final List<String> _programs = const [
+    'All',
+    'BSc',
+    'MSc',
+    'BBA',
+    'MBA',
+    'LLB',
+    'LLM',
+    'BA',
+    'MA',
+    'B.Arch',
+    'M.Arch',
   ];
-  final List<String> _priorities = ['normal', 'high', 'emergency'];
+
+  final List<String> _priorities = const ['Normal', 'High', 'Emergency'];
 
   @override
   void initState() {
@@ -158,41 +199,38 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
   Future<void> _loadAnnouncements() async {
     setState(() => _loadingList = true);
     final data = await SupabaseService.getAnnouncements();
-    if (mounted) {
-      setState(() {
-        _announcements = data;
-        _loadingList = false;
-      });
-    }
-  }
-
-  Future<void> _openRichNoticeCenter() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AnnouncementsPage()),
-    );
-    if (mounted) await _loadAnnouncements();
+    if (!mounted) return;
+    setState(() {
+      _announcements = data;
+      _loadingList = false;
+    });
   }
 
   Future<void> _post() async {
     if (!_formKey.currentState!.validate()) return;
+    FocusScope.of(context).unfocus();
     setState(() => _posting = true);
 
     try {
       await SupabaseService.postAnnouncement(
         title: _titleController.text.trim(),
         body: _bodyController.text.trim(),
+        targetRole: 'All',
         targetDepartment: _targetDept,
         targetProgram: _targetProgram,
         priority: _priority,
+        files: _files,
+        links: _links,
       );
 
       _titleController.clear();
       _bodyController.clear();
       setState(() {
-        _targetDept = 'all';
-        _targetProgram = 'all';
-        _priority = 'normal';
+        _targetDept = 'All';
+        _targetProgram = 'All';
+        _priority = 'Normal';
+        _files.clear();
+        _links.clear();
       });
 
       await _loadAnnouncements();
@@ -204,11 +242,11 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
           backgroundColor: Color(0xFF2ECC71),
         ),
       );
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to post. Try again.'),
+        SnackBar(
+          content: Text('Failed to post: $error'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -217,102 +255,95 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
     }
   }
 
-  Color _priorityColor(String p) {
-    switch (p) {
-      case 'emergency': return Colors.redAccent;
-      case 'high': return Colors.orange;
-      default: return const Color(0xFF2ECC71);
+  Future<void> _deleteAnnouncement(Announcement announcement) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete notice?'),
+        content: Text('This will permanently remove "${announcement.title}".'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Delete'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDelete != true) return;
+
+    try {
+      await SupabaseService.deleteAnnouncement(announcement.id);
+      if (!mounted) return;
+      setState(() {
+        _announcements.removeWhere((item) => item.id == announcement.id);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notice deleted.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Delete failed: $error')),
+      );
     }
   }
 
-  Widget _dropdown(String label, String value, List<String> items,
-      void Function(String?) onChanged) {
-    final safeItems = items.toSet().toList();
-    final safeValue = safeItems.contains(value)
-        ? value
-        : (safeItems.contains('all') ? 'all' : safeItems.first);
+  Color _priorityColor(String p) {
+    switch (p.toLowerCase()) {
+      case 'Emergency':
+        return Colors.redAccent;
+      case 'High':
+        return Colors.orange;
+      default:
+        return const Color(0xFF2ECC71);
+    }
+  }
 
+  String _label(String value) {
+    if (value == 'all') return 'All';
+    return value[0].toUpperCase() + value.substring(1);
+  }
+
+  Widget _dropdown(
+    String label,
+    String value,
+    List<String> items,
+    void Function(String?) onChanged,
+  ) {
     return DropdownButtonFormField<String>(
-      initialValue: safeValue,
+      initialValue: value,
       isExpanded: true,
       decoration: InputDecoration(
         labelText: label,
         filled: true,
         fillColor: Colors.white,
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
-      items: safeItems
-          .map((e) => DropdownMenuItem<String>(
-                value: e,
-                child: Text(
-                  e == 'all' ? 'All' : e,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ))
-          .toList(),
-      onChanged: onChanged,
-    );
-  }
-
-  Widget _richNoticeShortcut() {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2ECC71).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.attach_file, color: Color(0xFF1E8449)),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Notice with Media',
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                          color: const Color(0xFF123D35),
-                        ),
-                      ),
-                      const SizedBox(height: 3),  
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 44,
-              child: OutlinedButton.icon(
-                onPressed: _openRichNoticeCenter,
-                icon: const Icon(Icons.add_photo_alternate_outlined),
-                label: const Text('Add Notice with Media'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF1E8449),
-                  side: const BorderSide(color: Color(0xFF1E8449)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
+      items: items
+          .map(
+            (e) => DropdownMenuItem<String>(
+              value: e,
+              child: Text(
+                e == 'All' ? 'All' : e,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13),
               ),
             ),
-          ],
-        ),
-      ),
+          )
+          .toList(),
+      onChanged: onChanged,
     );
   }
 
@@ -321,23 +352,17 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Admin Announcements',
-            style: GoogleFonts.inter(
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-                color: const Color(0xFF2C3E50))),
+        Text(
+          'Post New Announcement',
+          style: GoogleFonts.inter(
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+            color: const Color(0xFF2C3E50),
+          ),
+        ),
         const SizedBox(height: 12),
-        _richNoticeShortcut(),
-        const SizedBox(height: 12),
-        Text('Quick Text Announcement',
-            style: GoogleFonts.inter(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-                color: const Color(0xFF2C3E50))),
-        const SizedBox(height: 8),
         Card(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Form(
@@ -348,7 +373,7 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
                     controller: _titleController,
                     keyboardType: TextInputType.text,
                     label: 'Title',
-                    hint: 'e.g. Holiday Notice',
+                    hint: 'e.g. 9-5PM CSE Routine Fall_26',
                     icon: Icons.title,
                     validator: (v) => (v == null || v.trim().isEmpty)
                         ? 'Title is required'
@@ -359,39 +384,107 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
                     controller: _bodyController,
                     keyboardType: TextInputType.multiline,
                     label: 'Message',
-                    hint: 'Write your announcement here...',
+                    hint: 'Write the announcement here...',
                     icon: Icons.message_outlined,
-                    maxLines: 4,
+                    maxLines: 6,
                     validator: (v) => (v == null || v.trim().isEmpty)
                         ? 'Message is required'
                         : null,
                   ),
                   const SizedBox(height: 10),
-                  _dropdown('Department', _targetDept, _departments,
-                      (v) => setState(() => _targetDept = v ?? 'all')),
-                  const SizedBox(height: 10),
-                  _dropdown('Program', _targetProgram, _programs,
-                      (v) => setState(() => _targetProgram = v ?? 'all')),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _priorities.map((p) {
-                      final selected = _priority == p;
-                      return ChoiceChip(
-                        label: Text(p[0].toUpperCase() + p.substring(1)),
-                        selected: selected,
-                        selectedColor: _priorityColor(p),
-                        backgroundColor: Colors.white,
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: selected ? Colors.white : _priorityColor(p),
-                        ),
-                        side: BorderSide(color: _priorityColor(p)),
-                        onSelected: (_) => setState(() => _priority = p),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final vertical = constraints.maxWidth < 620;
+                      final department = _dropdown(
+                        'Department',
+                        _targetDept,
+                        _departments,
+                        (v) => setState(() => _targetDept = v ?? 'All'),
                       );
-                    }).toList(),
+                      final program = _dropdown(
+                        'Program',
+                        _targetProgram,
+                        _programs,
+                        (v) => setState(() => _targetProgram = v ?? 'All'),
+                      );
+
+                      if (vertical) {
+                        return Column(
+                          children: [
+                            department,
+                            const SizedBox(height: 10),
+                            program,
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        children: [
+                          Expanded(child: department),
+                          const SizedBox(width: 10),
+                          Expanded(child: program),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final vertical = constraints.maxWidth < 520;
+                      final buttons = _priorities.map((p) {
+                        final selected = _priority == p;
+                        return Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _priority = p),
+                            child: Container(
+                              margin: EdgeInsets.only(
+                                right: vertical ? 0 : (p != _priorities.last ? 8 : 0),
+                                bottom: vertical ? 8 : 0,
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 11),
+                              decoration: BoxDecoration(
+                                color: selected ? _priorityColor(p) : Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: _priorityColor(p)),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                _label(p),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: selected ? Colors.white : _priorityColor(p),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList();
+
+                      if (vertical) {
+                        return Column(
+                          children: buttons.map((button) => SizedBox(width: double.infinity, child: button)).toList(),
+                        );
+                      }
+
+                      return Row(children: buttons);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  AttachmentPickerPanel(
+                    title: 'images/documents/links',
+                    files: _files,
+                    links: _links,
+                    onFilesChanged: (value) => setState(() {
+                      _files
+                        ..clear()
+                        ..addAll(value);
+                    }),
+                    onLinksChanged: (value) => setState(() {
+                      _links
+                        ..clear()
+                        ..addAll(value);
+                    }),
                   ),
                   const SizedBox(height: 14),
                   SizedBox(
@@ -399,19 +492,19 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
                     height: 46,
                     child: _posting
                         ? const Center(
-                            child: CircularProgressIndicator(
-                                color: Color(0xFF2ECC71)))
+                            child: CircularProgressIndicator(color: Color(0xFF2ECC71)),
+                          )
                         : ElevatedButton.icon(
                             onPressed: _post,
                             icon: const Icon(Icons.send, size: 18),
-                            label: Text('Post Announcement',
-                                style: GoogleFonts.inter(
-                                    fontWeight: FontWeight.w600)),
+                            label: Text(
+                              'Post Announcement',
+                              style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                            ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF2ECC71),
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
                           ),
                   ),
@@ -423,15 +516,18 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
         const SizedBox(height: 24),
         Row(
           children: [
-            Text('Posted Announcements',
+            Expanded(
+              child: Text(
+                'Posted Announcements',
                 style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    color: const Color(0xFF2C3E50))),
-            const Spacer(),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  color: const Color(0xFF2C3E50),
+                ),
+              ),
+            ),
             IconButton(
-              icon: const Icon(Icons.refresh,
-                  color: Color(0xFF2ECC71), size: 20),
+              icon: const Icon(Icons.refresh, color: Color(0xFF2ECC71), size: 20),
               onPressed: _loadAnnouncements,
             ),
           ],
@@ -442,46 +538,137 @@ class _AnnouncementsTabState extends State<_AnnouncementsTab> {
           Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: Text('No announcements yet.',
-                  style: TextStyle(color: Colors.grey[500])),
+              child: Text('No announcements yet.', style: TextStyle(color: Colors.grey[500])),
             ),
           )
         else
-          ..._announcements.map((a) {
-            final color = _priorityColor(a.priority);
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(
-                    color: color.withValues(alpha: 0.5), width: 1),
-              ),
-              child: ListTile(
-                leading: CircleAvatar(
+          ..._announcements.map((a) => _AdminAnnouncementCard(
+                announcement: a,
+                color: _priorityColor(a.priority),
+                onDelete: () => _deleteAnnouncement(a),
+              )),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+}
+
+class _AdminAnnouncementCard extends StatelessWidget {
+  const _AdminAnnouncementCard({
+    required this.announcement,
+    required this.color,
+    required this.onDelete,
+  });
+
+  final Announcement announcement;
+  final Color color;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final priority = announcement.priority.toLowerCase();
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: color.withValues(alpha: 0.5), width: 1),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
                   backgroundColor: color,
                   radius: 18,
                   child: Icon(
-                    a.priority == 'emergency'
+                    priority == 'Emergency'
                         ? Icons.warning_amber_rounded
-                        : a.priority == 'high'
+                        : priority == 'High'
                             ? Icons.priority_high
                             : Icons.notifications_outlined,
                     color: Colors.white,
                     size: 16,
                   ),
                 ),
-                title: Text(a.title,
-                    style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w600, fontSize: 13)),
-                subtitle: Text(
-                  '${a.targetDepartment == 'all' ? 'All Depts' : a.targetDepartment} · ${DateFormat('dd MMM, hh:mm a').format(a.createdAt)}',
-                  style: const TextStyle(fontSize: 11),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        announcement.title,
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: const Color(0xFF2C3E50),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${announcement.targetDepartment == 'All' ? 'All Depts' : announcement.targetDepartment} · ${DateFormat('dd MMM, hh:mm a').format(announcement.createdAt.toLocal())}',
+                        style: const TextStyle(fontSize: 11, color: Colors.black54),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          }),
-        const SizedBox(height: 16),
-      ],
+                IconButton(
+                  tooltip: 'Delete notice',
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  onPressed: onDelete,
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            LinkifiedText(
+              text: announcement.body,
+              style: const TextStyle(fontSize: 13, height: 1.45, color: Color(0xFF425466)),
+            ),
+            if (announcement.attachments.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              AttachmentViewer(attachments: announcement.attachments),
+            ],
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                _MiniChip(label: priority.toUpperCase(), color: color),
+                _MiniChip(label: announcement.targetProgram == 'All' ? 'All Programs' : announcement.targetProgram, color: const Color(0xFF1E8449)),
+                if (announcement.imageCount > 0) _MiniChip(label: '${announcement.imageCount} image', color: const Color(0xFF1E8449)),
+                if (announcement.fileCount > 0) _MiniChip(label: '${announcement.fileCount} file', color: const Color(0xFF1E8449)),
+                if (announcement.linkCount > 0) _MiniChip(label: '${announcement.linkCount} link', color: const Color(0xFF1E8449)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniChip extends StatelessWidget {
+  const _MiniChip({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
+      ),
     );
   }
 }
@@ -577,7 +764,7 @@ class _ComplaintsTabState extends State<_ComplaintsTab> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      s == 'all'
+                      s == 'All'
                           ? 'All'
                           : s == 'in_review'
                               ? 'In Review'
@@ -901,8 +1088,8 @@ class _BusesTabState extends State<_BusesTab> {
                   borderRadius: BorderRadius.circular(14),
                   side: BorderSide(
                     color: online
-                        ? const Color(0xFF2ECC71).withOpacity( 0.5)
-                        : Colors.grey.withOpacity( 0.3),
+                        ? const Color(0xFF2ECC71).withValues(alpha: 0.5)
+                        : Colors.grey.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Padding(

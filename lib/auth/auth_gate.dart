@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'login_page.dart';
+import '../models/user_model.dart';
 import '../pages/admin_page.dart';
-import '../pages/complete_profile_page.dart';
 import '../pages/driver_page.dart';
 import '../pages/home_page.dart';
 import '../services/notification_service.dart';
@@ -22,12 +23,12 @@ class AuthGate extends StatelessWidget {
           return const _SplashScreen();
         }
 
-        
         if (session == null) {
+          
           return const HomePage();
         }
 
-        return FutureBuilder<Map<String, dynamic>?>(
+        return FutureBuilder<UserModel?>(
           future: _loadAndSetupUser(),
           builder: (context, profileSnapshot) {
             if (profileSnapshot.connectionState == ConnectionState.waiting) {
@@ -38,20 +39,14 @@ class AuthGate extends StatelessWidget {
               return _AuthErrorScreen(error: profileSnapshot.error.toString());
             }
 
-            final user = Supabase.instance.client.auth.currentUser;
             final profile = profileSnapshot.data;
 
-            if (profile == null || !_isProfileComplete(profile)) {
-              return CompleteProfilePage(
-                email: user?.email ?? profile?['email']?.toString() ?? '',
-                name: user?.userMetadata?['full_name']?.toString() ??
-                    user?.userMetadata?['name']?.toString() ??
-                    profile?['name']?.toString() ??
-                    '',
-              );
+            
+            if (profile == null) {
+              return const HomePage();
             }
 
-            switch ((profile['role'] ?? 'student').toString()) {
+            switch (profile.role.toLowerCase()) {
               case 'driver':
                 return const DriverPage();
               case 'admin':
@@ -65,40 +60,18 @@ class AuthGate extends StatelessWidget {
     );
   }
 
-  Future<Map<String, dynamic>?> _loadAndSetupUser() async {
-    final profile = await SupabaseService.getProfileMap();
+  Future<UserModel?> _loadAndSetupUser() async {
+    final profile = await SupabaseService.getProfile();
 
-    if (profile != null && _isProfileComplete(profile)) {
-      try {
-        await NotificationService.saveTokenToSupabase();
-        await NotificationService.subscribeUserTopics(
-          department: (profile['department'] ?? '').toString().isEmpty
-              ? 'all'
-              : profile['department'].toString(),
-          program: (profile['program'] ?? '').toString().isEmpty
-              ? 'all'
-              : profile['program'].toString(),
-        );
-      } catch (e) {
-        
-        debugPrint('Notification setup skipped: $e');
-      }
+    if (profile != null) {
+      await NotificationService.saveTokenToSupabase();
+      await NotificationService.subscribeUserTopics(
+        department: profile.department.isEmpty ? 'All' : profile.department,
+        program: profile.program.isEmpty ? 'All' : profile.program,
+      );
     }
 
     return profile;
-  }
-
-  bool _isProfileComplete(Map<String, dynamic> profile) {
-    final role = (profile['role'] ?? 'student').toString();
-    final name = (profile['name'] ?? '').toString().trim();
-    final phone = (profile['phone'] ?? '').toString().trim();
-    final id = (profile['student_id'] ?? '').toString().trim();
-    final route = (profile['assigned_route'] ?? '').toString().trim();
-
-    if (name.isEmpty || phone.isEmpty) return false;
-    if (role == 'student' && id.isEmpty) return false;
-    if (role == 'driver' && route.isEmpty) return false;
-    return true;
   }
 }
 
@@ -138,6 +111,16 @@ class _AuthErrorScreen extends StatelessWidget {
 
   const _AuthErrorScreen({required this.error});
 
+  Future<void> _backToLogin(BuildContext context) async {
+    await SupabaseService.signOut();
+    if (!context.mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const HomePage()),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -158,10 +141,8 @@ class _AuthErrorScreen extends StatelessWidget {
               Text(error, textAlign: TextAlign.center),
               const SizedBox(height: 18),
               ElevatedButton(
-                onPressed: () async {
-                  await SupabaseService.signOut();
-                },
-                child: const Text('Back to Home'),
+                onPressed: () => _backToLogin(context),
+                child: const Text('Login/Register'),
               ),
             ],
           ),

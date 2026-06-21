@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -15,11 +16,53 @@ class SupabaseService {
   static String get currentUserEmail => _client.auth.currentUser?.email ?? '';
   static bool get isLoggedIn => _client.auth.currentSession != null;
 
+  static String _lower(String? value) => (value ?? '').trim().toLowerCase();
+
+  static String _target(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty || text.toLowerCase() == 'all') return 'all';
+    return text;
+  }
+
+  static String _priority(String? value) {
+    switch (_lower(value)) {
+      case 'High':
+        return 'High';
+      case 'Emergency':
+        return 'Emergency';
+      case 'Normal':
+      default:
+        return 'Normal';
+    }
+  }
+
+  static String _complaintPriority(String? value) {
+    switch (_lower(value)) {
+      case 'High':
+        return 'High';
+      case 'Urgent':
+        return 'Urgent';
+      case 'Normal':
+      default:
+        return 'normal';
+    }
+  }
+
+  static bool _targetMatches(String stored, String requested) {
+    final a = _lower(stored);
+    final b = _lower(requested);
+    return a == 'all' || b == 'all' || a == b;
+  }
+
+  
   static Future<Map<String, dynamic>?> getProfileMap() async {
     final userId = currentUserId;
     if (userId == null) return null;
-
-    final data = await _client.from('profiles').select().eq('id', userId).maybeSingle();
+    final data = await _client
+        .from('profiles')
+        .select()
+        .eq('id', userId)
+        .maybeSingle();
     return data == null ? null : Map<String, dynamic>.from(data);
   }
 
@@ -28,6 +71,9 @@ class SupabaseService {
     if (data == null) return null;
     return UserModel.fromMap(data);
   }
+
+  
+  static Future<UserModel?> getCurrentProfile() => getProfile();
 
   static Future<bool> isCurrentUserAdmin() async {
     final profile = await getProfileMap();
@@ -56,17 +102,23 @@ class SupabaseService {
 
   static Future<String> uploadAvatarBytes(Uint8List bytes, String originalName) async {
     final userId = currentUserId;
-    if (userId == null) throw const AuthException('You must be logged in to upload a profile picture.');
-
+    if (userId == null) {
+      throw const AuthException('You must be logged in to upload a profile picture.');
+    }
     final ext = _extension(originalName, fallback: 'jpg');
     final safeExt = ['jpg', 'jpeg', 'png', 'webp'].contains(ext) ? ext : 'jpg';
     final contentType = _mimeType('avatar.$safeExt');
-    final storagePath = '$userId/avatars/avatar_${DateTime.now().millisecondsSinceEpoch}.$safeExt';
+    final storagePath =
+        '$userId/avatars/avatar_${DateTime.now().millisecondsSinceEpoch}.$safeExt';
 
     await _client.storage.from('avatars').uploadBinary(
           storagePath,
           bytes,
-          fileOptions: FileOptions(cacheControl: '3600', upsert: true, contentType: contentType),
+          fileOptions: FileOptions(
+            cacheControl: '3600',
+            upsert: true,
+            contentType: contentType,
+          ),
         );
 
     final publicUrl = _client.storage.from('avatars').getPublicUrl(storagePath);
@@ -74,11 +126,21 @@ class SupabaseService {
     return publicUrl;
   }
 
-  static Future<void> saveDeviceToken({required String fcmToken, String platform = 'android'}) async {
+
+  static Future<String> uploadAvatar(File imageFile) async {
+    final bytes = await imageFile.readAsBytes();
+    final name = imageFile.path.split(Platform.pathSeparator).last;
+    return uploadAvatarBytes(bytes, name);
+  }
+
+  
+  static Future<void> saveDeviceToken({
+    required String fcmToken,
+    String platform = 'android',
+  }) async {
     final userId = currentUserId;
     if (userId == null || fcmToken.trim().isEmpty) return;
     final profile = await getProfileMap();
-
     await _client.from('device_tokens').upsert({
       'user_id': userId,
       'fcm_token': fcmToken,
@@ -100,7 +162,7 @@ class SupabaseService {
     }).eq('fcm_token', fcmToken);
   }
 
-  // ---------------- Bus ----------------
+  
   static Future<void> updateBusLocation({
     required String busId,
     required double lat,
@@ -130,7 +192,10 @@ class SupabaseService {
 
   static Future<List<Map<String, dynamic>>> getBusLocations() async {
     try {
-      final data = await _client.from('bus_locations').select().order('updated_at', ascending: false);
+      final data = await _client
+          .from('bus_locations')
+          .select()
+          .order('updated_at', ascending: false);
       return List<Map<String, dynamic>>.from(data);
     } catch (_) {
       return [];
@@ -149,25 +214,28 @@ class SupabaseService {
         .subscribe();
   }
 
-  // ---------------- Announcements ----------------
+  
   static Future<List<Announcement>> getAnnouncements({
     String role = 'all',
     String department = 'all',
     String program = 'all',
   }) async {
     try {
-      final data = await _client.from('announcements').select().order('created_at', ascending: false);
-      final list = <Announcement>[];
+      final data = await _client
+          .from('announcements')
+          .select()
+          .order('created_at', ascending: false);
 
+      final list = <Announcement>[];
       for (final raw in data as List) {
-        final map = Map<String, dynamic>.from(raw);
+        final map = Map<String, dynamic>.from(raw as Map);
         final targetRole = (map['target_role'] ?? 'all').toString();
         final targetDepartment = (map['target_department'] ?? 'all').toString();
         final targetProgram = (map['target_program'] ?? 'all').toString();
 
-        final roleOk = targetRole == 'all' || role == 'all' || targetRole == role;
-        final deptOk = targetDepartment == 'all' || department == 'all' || targetDepartment == department;
-        final programOk = targetProgram == 'all' || program == 'all' || targetProgram == program;
+        final roleOk = _targetMatches(targetRole, role);
+        final deptOk = _targetMatches(targetDepartment, department);
+        final programOk = _targetMatches(targetProgram, program);
         if (!roleOk || !deptOk || !programOk) continue;
 
         final attachments = await getAnnouncementAttachments(map['id'].toString());
@@ -192,12 +260,12 @@ class SupabaseService {
     final inserted = await _client
         .from('announcements')
         .insert({
-          'title': title,
-          'body': body,
-          'target_role': targetRole,
-          'target_department': targetDepartment,
-          'target_program': targetProgram,
-          'priority': priority,
+          'title': title.trim(),
+          'body': body.trim(),
+          'target_role': _target(targetRole),
+          'target_department': _target(targetDepartment),
+          'target_program': _target(targetProgram),
+          'priority': _priority(priority),
           'sent_push': false,
           'created_at': DateTime.now().toIso8601String(),
         })
@@ -205,8 +273,37 @@ class SupabaseService {
         .single();
 
     final announcementId = inserted['id'].toString();
-    await _saveAnnouncementAttachments(announcementId: announcementId, files: files, links: links);
+    await _saveAnnouncementAttachments(
+      announcementId: announcementId,
+      files: files,
+      links: links,
+    );
     return announcementId;
+  }
+
+  static Future<void> deleteAnnouncement(String announcementId) async {
+    final isAdmin = await isCurrentUserAdmin();
+    if (!isAdmin) {
+      throw const AuthException('Only admins can delete notices.');
+    }
+
+    final attachments = await getAnnouncementAttachments(announcementId);
+    final paths = attachments
+        .where((a) => !a.isLink && a.storagePath.trim().isNotEmpty)
+        .map((a) => a.storagePath)
+        .toList();
+
+    if (paths.isNotEmpty) {
+      try {
+        await _client.storage.from(attachmentsBucket).remove(paths);
+      } catch (_) {}
+    }
+
+    await _client
+        .from('announcement_attachments')
+        .delete()
+        .eq('announcement_id', announcementId);
+    await _client.from('announcements').delete().eq('id', announcementId);
   }
 
   static Future<void> _saveAnnouncementAttachments({
@@ -215,7 +312,10 @@ class SupabaseService {
     required List<NoticeLink> links,
   }) async {
     for (final file in files) {
-      final uploaded = await _uploadPickedFile(file, folder: 'announcements/$announcementId');
+      final uploaded = await _uploadPickedFile(
+        file,
+        folder: 'announcements/$announcementId',
+      );
       await _client.from('announcement_attachments').insert({
         'announcement_id': announcementId,
         'kind': uploaded.kind,
@@ -231,8 +331,8 @@ class SupabaseService {
       await _client.from('announcement_attachments').insert({
         'announcement_id': announcementId,
         'kind': 'link',
-        'file_name': link.title,
-        'file_url': link.url,
+        'file_name': link.title.trim(),
+        'file_url': link.url.trim(),
         'mime_type': 'text/uri-list',
         'file_size': 0,
         'storage_path': '',
@@ -240,14 +340,18 @@ class SupabaseService {
     }
   }
 
-  static Future<List<AppAttachment>> getAnnouncementAttachments(String announcementId) async {
+  static Future<List<AppAttachment>> getAnnouncementAttachments(
+    String announcementId,
+  ) async {
     try {
       final data = await _client
           .from('announcement_attachments')
           .select()
           .eq('announcement_id', announcementId)
           .order('created_at', ascending: true);
-      return (data as List).map((e) => AppAttachment.fromMap(Map<String, dynamic>.from(e))).toList();
+      return (data as List)
+          .map((e) => AppAttachment.fromMap(Map<String, dynamic>.from(e as Map)))
+          .toList();
     } catch (_) {
       return [];
     }
@@ -265,7 +369,7 @@ class SupabaseService {
         .subscribe();
   }
 
-  // ---------------- Complaints ----------------
+  
   static Future<String> submitComplaint({
     required String category,
     required String subject,
@@ -287,7 +391,7 @@ class SupabaseService {
           'category': category,
           'subject': subject,
           'description': description,
-          'priority': priority,
+          'priority': _complaintPriority(priority),
           'status': 'pending',
           'created_at': DateTime.now().toIso8601String(),
         })
@@ -295,30 +399,46 @@ class SupabaseService {
         .single();
 
     final complaintId = inserted['id'].toString();
-    await _saveComplaintAttachments(complaintId: complaintId, files: files, links: links);
+    await _saveComplaintAttachments(
+      complaintId: complaintId,
+      files: files,
+      links: links,
+    );
     return complaintId;
   }
 
   static Future<List<ComplaintModel>> getMyComplaints() async {
     final userId = currentUserId;
     if (userId == null) return [];
+    final data = await _client
+        .from('complaints')
+        .select()
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
 
-    final data = await _client.from('complaints').select().eq('user_id', userId).order('created_at', ascending: false);
     final list = <ComplaintModel>[];
     for (final raw in data as List) {
-      final map = Map<String, dynamic>.from(raw);
-      final attachments = (await getComplaintAttachments(map['id'].toString())).where((a) => a.replyId == null).toList();
+      final map = Map<String, dynamic>.from(raw as Map);
+      final attachments = (await getComplaintAttachments(map['id'].toString()))
+          .where((a) => a.replyId == null)
+          .toList();
       list.add(ComplaintModel.fromMap(map, attachments: attachments));
     }
     return list;
   }
 
   static Future<List<ComplaintModel>> getAllComplaints() async {
-    final data = await _client.from('complaints').select().order('created_at', ascending: false);
+    final data = await _client
+        .from('complaints')
+        .select()
+        .order('created_at', ascending: false);
+
     final list = <ComplaintModel>[];
     for (final raw in data as List) {
-      final map = Map<String, dynamic>.from(raw);
-      final attachments = (await getComplaintAttachments(map['id'].toString())).where((a) => a.replyId == null).toList();
+      final map = Map<String, dynamic>.from(raw as Map);
+      final attachments = (await getComplaintAttachments(map['id'].toString()))
+          .where((a) => a.replyId == null)
+          .toList();
       list.add(ComplaintModel.fromMap(map, attachments: attachments));
     }
     return list;
@@ -331,7 +451,9 @@ class SupabaseService {
           .select()
           .eq('complaint_id', complaintId)
           .order('created_at', ascending: true);
-      return (data as List).map((e) => AppAttachment.fromMap(Map<String, dynamic>.from(e))).toList();
+      return (data as List)
+          .map((e) => AppAttachment.fromMap(Map<String, dynamic>.from(e as Map)))
+          .toList();
     } catch (_) {
       return [];
     }
@@ -344,9 +466,11 @@ class SupabaseService {
     required List<NoticeLink> links,
   }) async {
     final userId = currentUserId;
-
     for (final file in files) {
-      final uploaded = await _uploadPickedFile(file, folder: 'complaints/$complaintId${replyId == null ? '' : '/replies/$replyId'}');
+      final uploaded = await _uploadPickedFile(
+        file,
+        folder: 'complaints/$complaintId${replyId == null ? '' : '/replies/$replyId'}',
+      );
       await _client.from('complaint_attachments').insert({
         'complaint_id': complaintId,
         'reply_id': replyId,
@@ -366,8 +490,8 @@ class SupabaseService {
         'reply_id': replyId,
         'sender_id': userId,
         'kind': 'link',
-        'file_name': link.title,
-        'file_url': link.url,
+        'file_name': link.title.trim(),
+        'file_url': link.url.trim(),
         'mime_type': 'text/uri-list',
         'file_size': 0,
         'storage_path': '',
@@ -385,7 +509,7 @@ class SupabaseService {
     final allAttachments = await getComplaintAttachments(complaintId);
     final replies = <ComplaintReply>[];
     for (final raw in repliesData as List) {
-      final map = Map<String, dynamic>.from(raw);
+      final map = Map<String, dynamic>.from(raw as Map);
       final replyId = map['id'].toString();
       final replyAttachments = allAttachments.where((a) => a.replyId == replyId).toList();
       replies.add(ComplaintReply.fromMap(map, attachments: replyAttachments));
@@ -417,19 +541,29 @@ class SupabaseService {
         .single();
 
     final replyId = inserted['id'].toString();
-    await _saveComplaintAttachments(complaintId: complaintId, replyId: replyId, files: files, links: links);
+    await _saveComplaintAttachments(
+      complaintId: complaintId,
+      replyId: replyId,
+      files: files,
+      links: links,
+    );
     return replyId;
   }
 
-  static Future<void> updateComplaintStatus({required String complaintId, required String status}) async {
+  static Future<void> updateComplaintStatus({
+    required String complaintId,
+    required String status,
+  }) async {
     await _client.from('complaints').update({
       'status': status,
       'updated_at': DateTime.now().toIso8601String(),
     }).eq('id', complaintId);
   }
 
-  
-  static Future<AppAttachment> _uploadPickedFile(PickedAttachment file, {required String folder}) async {
+  static Future<AppAttachment> _uploadPickedFile(
+    PickedAttachment file, {
+    required String folder,
+  }) async {
     final userId = currentUserId;
     if (userId == null) throw const AuthException('Please login to upload files.');
 
@@ -441,10 +575,14 @@ class SupabaseService {
     await _client.storage.from(attachmentsBucket).uploadBinary(
           path,
           file.bytes,
-          fileOptions: FileOptions(cacheControl: '3600', upsert: true, contentType: mime),
+          fileOptions: FileOptions(
+            cacheControl: '3600',
+            upsert: true,
+            contentType: mime,
+          ),
         );
-
     final url = _client.storage.from(attachmentsBucket).getPublicUrl(path);
+
     return AppAttachment(
       id: '',
       ownerId: '',

@@ -29,7 +29,14 @@ class ComplaintModel {
     this.attachments = const [],
   });
 
-  factory ComplaintModel.fromMap(Map<String, dynamic> map, {List<AppAttachment> attachments = const []}) {
+  int get imageCount => attachments.where((a) => a.isImage).length;
+  int get fileCount => attachments.where((a) => a.isFile).length;
+  int get linkCount => attachments.where((a) => a.isLink).length;
+
+  factory ComplaintModel.fromMap(
+    Map<String, dynamic> map, {
+    List<AppAttachment> attachments = const [],
+  }) {
     return ComplaintModel(
       id: (map['id'] ?? '').toString(),
       userId: (map['user_id'] ?? '').toString(),
@@ -68,7 +75,14 @@ class ComplaintReply {
     this.attachments = const [],
   });
 
-  factory ComplaintReply.fromMap(Map<String, dynamic> map, {List<AppAttachment> attachments = const []}) {
+  int get imageCount => attachments.where((a) => a.isImage).length;
+  int get fileCount => attachments.where((a) => a.isFile).length;
+  int get linkCount => attachments.where((a) => a.isLink).length;
+
+  factory ComplaintReply.fromMap(
+    Map<String, dynamic> map, {
+    List<AppAttachment> attachments = const [],
+  }) {
     return ComplaintReply(
       id: (map['id'] ?? '').toString(),
       complaintId: (map['complaint_id'] ?? '').toString(),

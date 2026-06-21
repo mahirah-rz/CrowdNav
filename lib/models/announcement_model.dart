@@ -21,7 +21,7 @@ class Announcement {
     this.attachments = const [],
   });
 
-  factory Announcement.fromMap(Map<String, dynamic> map, {List<AppAttachment> attachments = const []}) {
+  factory Announcement.fromMap(Map map, {List<AppAttachment> attachments = const []}) {
     return Announcement(
       id: (map['id'] ?? '').toString(),
       title: (map['title'] ?? '').toString(),
@@ -29,7 +29,8 @@ class Announcement {
       targetDepartment: (map['target_department'] ?? 'all').toString(),
       targetProgram: (map['target_program'] ?? 'all').toString(),
       priority: (map['priority'] ?? 'normal').toString(),
-      createdAt: DateTime.tryParse((map['created_at'] ?? '').toString()) ?? DateTime.now(),
+      createdAt: DateTime.tryParse((map['created_at'] ?? '').toString()) ??
+          DateTime.now(),
       attachments: attachments,
     );
   }

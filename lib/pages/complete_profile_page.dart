@@ -35,7 +35,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
   final List<String> _departments = const [
     'CSE', 'EEE', 'Architecture', 'Business Administration', 'English',
     'Law', 'Bangla', 'Tourism & Hospitality Management', 'Public Health',
-    'Islamic History & Culture', 'Civil Engineering',
+    'Islamic History & Culture', 'Civil Engineering', 
   ];
   final List<String> _programs = const [
     'BSc', 'MSc', 'BBA', 'MBA', 'LLB', 'LLM', 'BA', 'MA', 'B.Arch', 'M.Arch',
@@ -50,10 +50,13 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
     'Route 4 – Tilagor (via Bypass)',
   ];
 
-  bool get _needsDepartment => _selectedRole == 'student' || _selectedRole == 'faculty' || _selectedRole == 'office_staff';
+  bool get _needsStudentId => _selectedRole == 'student';
+  bool get _needsDepartment =>
+      _selectedRole == 'student' ||
+      _selectedRole == 'faculty' ||
+      _selectedRole == 'office_staff';
   bool get _needsProgram => _selectedRole == 'student';
   bool get _needsRoute => _selectedRole == 'driver';
-  bool get _needsId => _selectedRole == 'student';
 
   @override
   void initState() {
@@ -92,14 +95,14 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
     try {
       await SupabaseService.upsertProfile({
         'name': _nameController.text.trim(),
-        'student_id': _needsId ? _idController.text.trim() : '',
+        'student_id': _needsStudentId ? _idController.text.trim() : null,
         'email': widget.email,
         'phone': _phoneController.text.trim(),
-        'department': _needsDepartment ? _selectedDepartment : '',
-        'program': _needsProgram ? _selectedProgram : '',
+        'department': _needsDepartment ? _selectedDepartment : null,
+        'program': _needsProgram ? _selectedProgram : null,
         'blood_group': _selectedBloodGroup,
         'role': _selectedRole,
-        'assigned_route': _needsRoute ? _assignedRoute : '',
+        'assigned_route': _needsRoute ? _assignedRoute : null,
       });
 
       if (!mounted) return;
@@ -125,23 +128,40 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
     required void Function(String?) onChanged,
     String Function(String)? display,
   }) {
+    final safeValue = items.contains(value) ? value : items.first;
     return DropdownButtonFormField<String>(
-      initialValue: items.contains(value) ? value : items.first,
+      initialValue: safeValue,
       isExpanded: true,
       decoration: InputDecoration(
         labelText: label,
         filled: true,
         fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       ),
+      selectedItemBuilder: (context) => items
+          .map(
+            (item) => Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                display == null ? item : display(item),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
+          .toList(),
       items: items
-          .map((e) => DropdownMenuItem(
-                value: e,
-                child: Text(
-                  display == null ? e : display(e),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ))
+          .map(
+            (item) => DropdownMenuItem(
+              value: item,
+              child: Text(
+                display == null ? item : display(item),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
           .toList(),
       onChanged: onChanged,
     );
@@ -190,14 +210,16 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'Name is required' : null,
                 ),
                 const SizedBox(height: 10),
-                if (_needsId) ...[
+                if (_needsStudentId) ...[
                   InputField(
                     controller: _idController,
                     keyboardType: TextInputType.text,
                     label: _idLabel,
                     hint: 'Enter your student ID',
                     icon: Icons.badge_outlined,
-                    validator: (v) => (v == null || v.trim().isEmpty) ? '$_idLabel is required' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Student ID is required'
+                        : null,
                   ),
                   const SizedBox(height: 10),
                 ],

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,229 +6,382 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/app_attachment.dart';
 
-class LinkifiedText extends StatelessWidget {
-  final String text;
-  final TextStyle? style;
-  final bool showDetectedLinks;
-
-  const LinkifiedText({
-    super.key,
-    required this.text,
-    this.style,
-    this.showDetectedLinks = true,
-  });
-
-  static final RegExp _urlRegex = RegExp(r'(https?:\/\/[^\s]+)', caseSensitive: false);
-
-  static List<String> extractLinks(String input) {
-    return _urlRegex
-        .allMatches(input)
-        .map((m) => m.group(0) ?? '')
-        .map((u) => u.replaceAll(RegExp(r'[),.;।]+$'), ''))
-        .where((u) => u.isNotEmpty)
-        .toSet()
-        .toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final links = extractLinks(text);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SelectableText(text, style: style ?? const TextStyle(fontSize: 13, height: 1.5, color: Color(0xFF2C3E50))),
-        if (showDetectedLinks && links.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: links
-                .map((u) => ActionChip(
-                      avatar: const Icon(Icons.open_in_new, size: 16),
-                      label: Text(_shortUrl(u), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      onPressed: () => AttachmentActions.openUrl(context, u),
-                    ))
-                .toList(),
-          ),
-        ],
-      ],
-    );
-  }
-
-  static String _shortUrl(String url) {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return url;
-    if (uri.host.contains('docs.google.com')) return 'Google Docs / Sheet';
-    return uri.host.isEmpty ? url : uri.host;
-  }
-}
-
 class AttachmentViewer extends StatelessWidget {
-  final List<AppAttachment> attachments;
-  final String title;
-  final bool compact;
-
   const AttachmentViewer({
     super.key,
     required this.attachments,
-    this.title = 'Attachments',
+    this.title,
     this.compact = false,
   });
+
+  final List<AppAttachment> attachments;
+  final String? title;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     if (attachments.isEmpty) return const SizedBox.shrink();
 
     final images = attachments.where((a) => a.isImage).toList();
-    final linksAndFiles = attachments.where((a) => !a.isImage).toList();
+    final others = attachments.where((a) => !a.isImage).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (!compact) ...[
-          const SizedBox(height: 12),
-          Text(title, style: GoogleFonts.inter(fontWeight: FontWeight.w800, color: const Color(0xFF123D35))),
-          const SizedBox(height: 8),
+        if (title != null && title!.trim().isNotEmpty) ...[
+          _SectionTitle(text: title!, compact: compact),
+          SizedBox(height: compact ? 6 : 8),
         ],
-        if (images.isNotEmpty)
-          SizedBox(
-            height: compact ? 72 : 150,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: images.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final a = images[index];
-                return GestureDetector(
-                  onTap: () => _showImage(context, a),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      width: compact ? 72 : 150,
-                      color: Colors.grey[200],
-                      child: Image.network(
-                        a.fileUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.broken_image_outlined)),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        if (linksAndFiles.isNotEmpty) ...[
-          if (images.isNotEmpty) const SizedBox(height: 10),
-          ...linksAndFiles.map((a) => _AttachmentTile(attachment: a)),
+        if (images.isNotEmpty) ...[
+          if (title == null && !compact) ...[
+            const _SectionTitle(text: 'Images / screenshots'),
+            const SizedBox(height: 8),
+          ],
+          ...images.map((image) => _ImagePreviewTile(attachment: image, compact: compact)),
+        ],
+        if (others.isNotEmpty) ...[
+          if (images.isNotEmpty) SizedBox(height: compact ? 6 : 10),
+          if (title == null && !compact) ...[
+            const _SectionTitle(text: 'Links and documents'),
+            const SizedBox(height: 8),
+          ],
+          ...others.map((item) => _AttachmentActionTile(attachment: item, compact: compact)),
         ],
       ],
     );
   }
+}
 
-  void _showImage(BuildContext context, AppAttachment a) {
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        insetPadding: const EdgeInsets.all(14),
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.text, this.compact = false});
+
+  final String text;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: GoogleFonts.poppins(
+        fontSize: compact ? 12 : 14,
+        fontWeight: FontWeight.w800,
+        color: const Color(0xFF123D35),
+      ),
+    );
+  }
+}
+
+class _ImagePreviewTile extends StatelessWidget {
+  const _ImagePreviewTile({required this.attachment, required this.compact});
+
+  final AppAttachment attachment;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderRadius = BorderRadius.circular(compact ? 10 : 14);
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: compact ? 6 : 10),
+      child: InkWell(
+        borderRadius: borderRadius,
+        onTap: () => _showImagePreview(context, attachment),
+        child: ClipRRect(
+          borderRadius: borderRadius,
+          child: Stack(
+            children: [
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Image.network(
+                  attachment.fileUrl,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return Container(
+                      color: const Color(0xFFE8F5EA),
+                      alignment: Alignment.center,
+                      child: const CircularProgressIndicator(strokeWidth: 2),
+                    );
+                  },
+                  errorBuilder: (_, __, ___) => Container(
+                    color: const Color(0xFFE8F5EA),
+                    alignment: Alignment.center,
+                    child: Icon(Icons.broken_image_outlined, size: compact ? 30 : 42),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: compact ? 8 : 12,
+                    vertical: compact ? 6 : 8,
+                  ),
+                  color: Colors.black.withValues(alpha: 0.58),
+                  child: Row(
+                    children: [
+                      Icon(Icons.image_outlined, color: Colors.white, size: compact ? 15 : 18),
+                      SizedBox(width: compact ? 6 : 8),
+                      Expanded(
+                        child: Text(
+                          attachment.fileName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: compact ? 11 : 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.zoom_out_map, color: Colors.white, size: compact ? 15 : 18),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AttachmentActionTile extends StatelessWidget {
+  const _AttachmentActionTile({required this.attachment, required this.compact});
+
+  final AppAttachment attachment;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final isLink = attachment.isLink;
+
+    return Container(
+      margin: EdgeInsets.only(bottom: compact ? 6 : 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBF9),
+        borderRadius: BorderRadius.circular(compact ? 10 : 14),
+        border: Border.all(color: const Color(0xFFDCEFE3)),
+      ),
+      child: ListTile(
+        dense: compact,
+        minLeadingWidth: compact ? 28 : null,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: compact ? 8 : 12,
+          vertical: compact ? 0 : 4,
+        ),
+        leading: CircleAvatar(
+          radius: compact ? 15 : 20,
+          backgroundColor: isLink ? const Color(0xFFEAF3FF) : const Color(0xFFE8F5EA),
+          foregroundColor: isLink ? const Color(0xFF2E73B8) : const Color(0xFF1E8E4E),
+          child: Icon(isLink ? Icons.link : _fileIcon(attachment.fileName), size: compact ? 16 : 22),
+        ),
+        title: Text(
+          attachment.fileName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.poppins(
+            fontSize: compact ? 12 : 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Text(
+          isLink ? _cleanUrlHost(attachment.fileUrl) : _formatSize(attachment.fileSize),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.poppins(fontSize: compact ? 10 : 12),
+        ),
+        trailing: SizedBox(
+          width: compact ? 72 : 88,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: isLink ? 'Open link' : 'View / download file',
+                icon: Icon(isLink ? Icons.open_in_new : Icons.download_outlined, size: compact ? 18 : 22),
+                color: const Color(0xFF1E8E4E),
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints.tightFor(width: compact ? 34 : 40, height: compact ? 34 : 40),
+                onPressed: () => _openUrl(context, attachment.fileUrl),
+              ),
+              IconButton(
+                tooltip: 'Copy link',
+                icon: Icon(Icons.copy, size: compact ? 17 : 20),
+                color: const Color(0xFF425466),
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints.tightFor(width: compact ? 34 : 40, height: compact ? 34 : 40),
+                onPressed: () => _copyUrl(context, attachment.fileUrl),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class LinkifiedText extends StatelessWidget {
+  const LinkifiedText({super.key, required this.text, this.style});
+
+  final String text;
+  final TextStyle? style;
+
+  static final RegExp _urlRegex = RegExp(
+    r'((https?:\/\/)?([\w-]+\.)+[\w-]{2,}(:\d+)?(\/[^\s]*)?)',
+    caseSensitive: false,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final spans = <TextSpan>[];
+    int index = 0;
+
+    for (final match in _urlRegex.allMatches(text)) {
+      if (match.start > index) {
+        spans.add(TextSpan(text: text.substring(index, match.start)));
+      }
+
+      final rawUrl = match.group(0) ?? '';
+      final url = rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
+          ? rawUrl
+          : 'https://$rawUrl';
+
+      spans.add(
+        TextSpan(
+          text: rawUrl,
+          style: const TextStyle(
+            color: Color(0xFF1669C1),
+            decoration: TextDecoration.underline,
+            fontWeight: FontWeight.w800,
+          ),
+          recognizer: TapGestureRecognizer()..onTap = () => _openUrl(context, url),
+        ),
+      );
+      index = match.end;
+    }
+
+    if (index < text.length) {
+      spans.add(TextSpan(text: text.substring(index)));
+    }
+
+    return SelectableText.rich(
+      TextSpan(style: style, children: spans),
+      textAlign: TextAlign.start,
+    );
+  }
+}
+
+Future<void> _showImagePreview(BuildContext context, AppAttachment attachment) async {
+  await showDialog<void>(
+    context: context,
+    builder: (context) => Dialog.fullscreen(
+      backgroundColor: Colors.black,
+      child: SafeArea(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            AppBar(
-              title: Text(a.fileName, maxLines: 1, overflow: TextOverflow.ellipsis),
-              automaticallyImplyLeading: false,
-              actions: [
-                IconButton(icon: const Icon(Icons.copy), onPressed: () => AttachmentActions.copyUrl(context, a.fileUrl)),
-                IconButton(icon: const Icon(Icons.open_in_new), onPressed: () => AttachmentActions.openUrl(context, a.fileUrl)),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
-              ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Colors.white),
+                  ),
+                  Expanded(
+                    child: Text(
+                      attachment.fileName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Open',
+                    onPressed: () => _openUrl(context, attachment.fileUrl),
+                    icon: const Icon(Icons.open_in_new, color: Colors.white),
+                  ),
+                  IconButton(
+                    tooltip: 'Copy link',
+                    onPressed: () => _copyUrl(context, attachment.fileUrl),
+                    icon: const Icon(Icons.copy, color: Colors.white),
+                  ),
+                ],
+              ),
             ),
-            Flexible(
+            Expanded(
               child: InteractiveViewer(
-                child: Image.network(a.fileUrl, fit: BoxFit.contain),
+                minScale: 0.8,
+                maxScale: 5,
+                child: Center(
+                  child: Image.network(
+                    attachment.fileUrl,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.broken_image_outlined,
+                      color: Colors.white,
+                      size: 64,
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
-class _AttachmentTile extends StatelessWidget {
-  final AppAttachment attachment;
-
-  const _AttachmentTile({required this.attachment});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = attachment.isLink ? const Color(0xFF2E86DE) : const Color(0xFF1E8449);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha:0.22)),
-      ),
-      child: ListTile(
-        dense: true,
-        leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha:0.12),
-          child: Icon(_icon(), color: color, size: 20),
-        ),
-        title: Text(attachment.fileName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text(attachment.isLink ? attachment.fileUrl : '${_formatSize(attachment.fileSize)} • ${attachment.mimeType}', maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: PopupMenuButton<String>(
-          onSelected: (v) {
-            if (v == 'open') AttachmentActions.openUrl(context, attachment.fileUrl);
-            if (v == 'copy') AttachmentActions.copyUrl(context, attachment.fileUrl);
-            if (v == 'download') AttachmentActions.openUrl(context, attachment.fileUrl);
-          },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'open', child: Text('Open')),
-            PopupMenuItem(value: 'copy', child: Text('Copy link')),
-            PopupMenuItem(value: 'download', child: Text('Download / View')),
-          ],
-        ),
-        onTap: () => AttachmentActions.openUrl(context, attachment.fileUrl),
-      ),
-    );
+Future<void> _openUrl(BuildContext context, String rawUrl) async {
+  final url = rawUrl.trim();
+  final uri = Uri.tryParse(url.startsWith('http://') || url.startsWith('https://') ? url : 'https://$url');
+  if (uri == null) {
+    _message(context, 'Invalid link.');
+    return;
   }
 
-  IconData _icon() {
-    if (attachment.isLink) return Icons.link;
-    final n = attachment.fileName.toLowerCase();
-    if (n.endsWith('.pdf')) return Icons.picture_as_pdf_outlined;
-    if (n.endsWith('.doc') || n.endsWith('.docx')) return Icons.description_outlined;
-    if (n.endsWith('.xls') || n.endsWith('.xlsx')) return Icons.table_chart_outlined;
-    if (n.endsWith('.ppt') || n.endsWith('.pptx')) return Icons.slideshow_outlined;
-    return Icons.insert_drive_file_outlined;
-  }
-
-  String _formatSize(int bytes) {
-    if (bytes <= 0) return 'file';
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-}
-
-class AttachmentActions {
-  static Future<void> openUrl(BuildContext context, String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) {
-      _snack(context, 'Invalid link');
-      return;
+  try {
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && context.mounted) {
+      await launchUrl(uri, mode: LaunchMode.platformDefault);
     }
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!ok && context.mounted) _snack(context, 'Could not open link');
+  } catch (_) {
+    if (context.mounted) _message(context, 'Could not open this link/file.');
   }
+}
 
-  static Future<void> copyUrl(BuildContext context, String url) async {
-    await Clipboard.setData(ClipboardData(text: url));
-    if (context.mounted) _snack(context, 'Link copied');
-  }
+Future<void> _copyUrl(BuildContext context, String url) async {
+  await Clipboard.setData(ClipboardData(text: url));
+  if (context.mounted) _message(context, 'Link copied.');
+}
 
-  static void _snack(BuildContext context, String text) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-  }
+void _message(BuildContext context, String text) {
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+}
+
+String _formatSize(int bytes) {
+  if (bytes <= 0) return 'File';
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+}
+
+String _cleanUrlHost(String rawUrl) {
+  final uri = Uri.tryParse(rawUrl);
+  if (uri == null || uri.host.isEmpty) return rawUrl;
+  return uri.host.replaceFirst('www.', '');
+}
+
+IconData _fileIcon(String name) {
+  final lower = name.toLowerCase();
+  if (lower.endsWith('.pdf')) return Icons.picture_as_pdf_outlined;
+  if (lower.endsWith('.doc') || lower.endsWith('.docx')) return Icons.description_outlined;
+  if (lower.endsWith('.xls') || lower.endsWith('.xlsx')) return Icons.table_chart_outlined;
+  if (lower.endsWith('.ppt') || lower.endsWith('.pptx')) return Icons.slideshow_outlined;
+  if (lower.endsWith('.txt')) return Icons.article_outlined;
+  return Icons.insert_drive_file_outlined;
 }

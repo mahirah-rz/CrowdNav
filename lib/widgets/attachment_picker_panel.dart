@@ -54,7 +54,15 @@ class _AttachmentPickerPanelState extends State<AttachmentPickerPanel> {
       final selected = [...widget.files];
       for (final f in result.files) {
         final bytes = f.bytes;
-        if (bytes == null || bytes.isEmpty) continue;
+        if (bytes == null || bytes.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('${f.name} could not be read. Try again.')),
+            );
+          }
+          continue;
+        }
+
         final size = f.size > 0 ? f.size : bytes.length;
         if (size > 10 * 1024 * 1024) {
           if (mounted) {
@@ -64,8 +72,10 @@ class _AttachmentPickerPanelState extends State<AttachmentPickerPanel> {
           }
           continue;
         }
+
         selected.add(PickedAttachment(name: f.name, bytes: bytes, size: size));
       }
+
       widget.onFilesChanged(selected);
     } finally {
       if (mounted) setState(() => _picking = false);
@@ -73,54 +83,11 @@ class _AttachmentPickerPanelState extends State<AttachmentPickerPanel> {
   }
 
   Future<void> _addLink() async {
-    final titleController = TextEditingController();
-    final urlController = TextEditingController();
-
     final link = await showDialog<NoticeLink>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add link'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              decoration: const InputDecoration(
-                labelText: 'Link title',
-                hintText: 'Updated Bisemester',
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: urlController,
-              keyboardType: TextInputType.url,
-              decoration: const InputDecoration(
-                labelText: 'URL',
-                hintText: 'https://docs.google.com/...',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              final rawUrl = urlController.text.trim();
-              if (rawUrl.isEmpty) return;
-              final url = rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
-                  ? rawUrl
-                  : 'https://$rawUrl';
-              final title = titleController.text.trim().isEmpty ? url : titleController.text.trim();
-              Navigator.pop(context, NoticeLink(title: title, url: url));
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
+      barrierDismissible: false,
+      builder: (context) => const _LinkDialog(),
     );
-
-    titleController.dispose();
-    urlController.dispose();
 
     if (link != null) {
       widget.onLinksChanged([...widget.links, link]);
@@ -135,7 +102,10 @@ class _AttachmentPickerPanelState extends State<AttachmentPickerPanel> {
 
   IconData _fileIcon(String name) {
     final lower = name.toLowerCase();
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.webp')) {
+    if (lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.webp')) {
       return Icons.image_outlined;
     }
     if (lower.endsWith('.pdf')) return Icons.picture_as_pdf_outlined;
@@ -149,7 +119,6 @@ class _AttachmentPickerPanelState extends State<AttachmentPickerPanel> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final useVerticalLayout = constraints.maxWidth < 360;
-
         final uploadButton = OutlinedButton.icon(
           onPressed: _picking ? null : _pickFiles,
           icon: _picking
@@ -164,7 +133,6 @@ class _AttachmentPickerPanelState extends State<AttachmentPickerPanel> {
             child: Text('Upload file/photo'),
           ),
         );
-
         final linkButton = OutlinedButton.icon(
           onPressed: _addLink,
           icon: const Icon(Icons.link),
@@ -202,7 +170,7 @@ class _AttachmentPickerPanelState extends State<AttachmentPickerPanel> {
       color: const Color(0xFFF8FBF9),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: Colors.green.withOpacity(0.18)),
+        side: BorderSide(color: Colors.green.withValues(alpha: 0.18)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -278,6 +246,92 @@ class _AttachmentPickerPanelState extends State<AttachmentPickerPanel> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _LinkDialog extends StatefulWidget {
+  const _LinkDialog();
+
+  @override
+  State<_LinkDialog> createState() => _LinkDialogState();
+}
+
+class _LinkDialogState extends State<_LinkDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
+  final _urlController = TextEditingController();
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _urlController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    final rawUrl = _urlController.text.trim();
+    final url = rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
+        ? rawUrl
+        : 'https://$rawUrl';
+    final title = _titleController.text.trim().isEmpty ? url : _titleController.text.trim();
+    Navigator.pop(context, NoticeLink(title: title, url: url));
+  }
+
+  String? _validateUrl(String? value) {
+    final raw = (value ?? '').trim();
+    if (raw.isEmpty) return 'URL is required';
+    final normalized = raw.startsWith('http://') || raw.startsWith('https://')
+        ? raw
+        : 'https://$raw';
+    final uri = Uri.tryParse(normalized);
+    if (uri == null || uri.host.isEmpty) return 'Enter a valid URL';
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add link'),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: _titleController,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Link title',
+                hintText: 'Updated Bisemester',
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _urlController,
+              keyboardType: TextInputType.url,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(
+                labelText: 'URL',
+                hintText: 'https://docs.google.com/...',
+              ),
+              validator: _validateUrl,
+              onFieldSubmitted: (_) => _submit(),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _submit,
+          child: const Text('Add'),
+        ),
+      ],
     );
   }
 }
