@@ -84,7 +84,7 @@ const _routes = [
       'Eidgah',
       'Electric Supply',
       'Cristal Rose',
-      'Amberkhana (Silsila)',
+      'City Girls Hostel',
       'Dorshondewry',
       'Jalalabad',
       'Subidbazar',
@@ -95,10 +95,10 @@ const _routes = [
       'Mount Adora Hospital',
       'Surma Gate',
       'SUST Gate',
-      'Lesson Plan Madrasa',
       'Temukhi Point',
+      'Rail Crossing',
       'Leading University',
-     
+      
     ],
   },
   {
@@ -179,8 +179,8 @@ const _routes = [
       'Mount Adora Hospital',
       'Surma Gate',
       'SUST Gate',
-      'Lesson Plan Madrasa',
       'Temukhi Point',
+      'Rail Crossing',
       'Leading University',
     ],
   },
@@ -250,9 +250,10 @@ const _routes = [
       'Lakkatura',
       'Chowkidekhi Point',
       'Khashdobir',
+      'Lichubagan',
       'Mazumdari Fulkolil',
       'Hotel Polash',
-      'Amberkhana (Silsila)',
+      'Amberkhana point',
       'Dorshondewry',
       'Jalalabad',
       'Subidbazar',
@@ -263,6 +264,8 @@ const _routes = [
       'Mount Adora Hospital',
       'Surma Gate',
       'SUST Gate',
+      'Temukhi Point',
+      'Rail Crossing',
       'Leading University',
     ],
   },
@@ -410,6 +413,42 @@ class _BusTrackingPageState extends State<BusTrackingPage> {
     if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     return '${diff.inHours}h ago';
+  }
+
+  String _seatStatusLabel(String? status) {
+    switch ((status ?? '').trim()) {
+      case 'full':
+        return 'Bus is full, no seat left';
+      case 'almost_empty':
+        return 'Bus is almost empty';
+      case 'several_seats':
+      default:
+        return 'Bus has several seats';
+    }
+  }
+
+  Color _seatStatusColor(String? status) {
+    switch ((status ?? '').trim()) {
+      case 'full':
+        return Colors.redAccent;
+      case 'almost_empty':
+        return Colors.blueGrey;
+      case 'several_seats':
+      default:
+        return const Color(0xFF2ECC71);
+    }
+  }
+
+  IconData _seatStatusIcon(String? status) {
+    switch ((status ?? '').trim()) {
+      case 'full':
+        return Icons.event_seat_outlined;
+      case 'almost_empty':
+        return Icons.directions_bus_filled_outlined;
+      case 'several_seats':
+      default:
+        return Icons.airline_seat_recline_normal;
+    }
   }
 
   Future<void> _callDriver(String phone) async {
@@ -593,7 +632,7 @@ class _BusTrackingPageState extends State<BusTrackingPage> {
     return Marker(
       point: LatLng((b['latitude'] as num).toDouble(), (b['longitude'] as num).toDouble()),
       width: 96,
-      height: isSelected ? 88 : 58,
+      height: isSelected ? 102 : 58,
       child: GestureDetector(
         onTap: () => setState(() => _selectedBusId = isSelected ? null : busId),
         child: Column(
@@ -609,6 +648,12 @@ class _BusTrackingPageState extends State<BusTrackingPage> {
                 child: Column(
                   children: [
                     Text(driverName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+                    Text(
+                      _seatStatusLabel(b['seat_status'] as String?),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 9, color: _seatStatusColor(b['seat_status'] as String?), fontWeight: FontWeight.w800),
+                    ),
                     if (phone.isNotEmpty) Text(phone, style: const TextStyle(fontSize: 9, color: Color(0xFF123D35))),
                   ],
                 ),
@@ -691,6 +736,8 @@ class _BusTrackingPageState extends State<BusTrackingPage> {
     final phone = (bus['driver_phone'] ?? '').toString();
     final speed = bus['speed_kmph'] == null ? null : (bus['speed_kmph'] as num).toDouble();
     final speedText = speed == null ? '' : ' • ${speed.toStringAsFixed(1)} km/h';
+    final seatStatus = (bus['seat_status'] ?? 'several_seats').toString();
+    final seatColor = _seatStatusColor(seatStatus);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -706,6 +753,30 @@ class _BusTrackingPageState extends State<BusTrackingPage> {
               children: [
                 Text(driverName, style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF123D35))),
                 Text('Updated ${_lastSeen(bus['updated_at'] as String?)}$speedText', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                const SizedBox(height: 5),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: seatColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: seatColor.withValues(alpha: 0.35)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_seatStatusIcon(seatStatus), size: 13, color: seatColor),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          _seatStatusLabel(seatStatus),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 11, color: seatColor, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 if (phone.isNotEmpty) Text(phone, style: const TextStyle(fontSize: 11, color: Color(0xFF123D35))),
               ],
             ),

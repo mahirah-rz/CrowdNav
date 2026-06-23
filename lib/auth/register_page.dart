@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/supabase_service.dart';
 import 'auth_gate.dart';
 import '../widgets/input_field.dart';
 
@@ -129,37 +130,46 @@ class _RegisterPageState extends State<RegisterPage> {
     super.dispose();
   }
 
+  Map<String, dynamic> _profilePayload() {
+    return {
+      'name': _nameController.text.trim(),
+      'full_name': _nameController.text.trim(),
+      'email': _emailController.text.trim(),
+      'phone': _phoneController.text.trim(),
+      'role': _selectedRole,
+      'student_id': _needsStudentId ? _studentIdController.text.trim() : null,
+      'department': _needsDepartment ? _selectedDepartment : null,
+      'program': _needsProgram ? _selectedProgram : null,
+      'office_section': _needsOfficeSection ? _selectedOfficeSection : null,
+      'assigned_route': _needsRoute ? _assignedRoute : null,
+      'blood_group': _selectedBloodGroup,
+    };
+  }
+
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
+      final profilePayload = _profilePayload();
+
       final authResponse = await Supabase.instance.client.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
         emailRedirectTo: _emailConfirmedRedirectUrl,
+        data: profilePayload,
       );
 
       final user = authResponse.user;
 
-      if (user != null) {
-        await Supabase.instance.client.from('profiles').upsert({
+      if (user != null && authResponse.session != null) {
+
+        await SupabaseService.upsertProfile({
+          ...profilePayload,
           'id': user.id,
-          'name': _nameController.text.trim(),
           'email': _emailController.text.trim(),
-          'phone': _phoneController.text.trim(),
-          'role': _selectedRole,
-          'student_id':
-              _needsStudentId ? _studentIdController.text.trim() : null,
-          'department': _needsDepartment ? _selectedDepartment : null,
-          'program': _needsProgram ? _selectedProgram : null,
-          'office_section':
-              _needsOfficeSection ? _selectedOfficeSection : null,
-          'assigned_route': _needsRoute ? _assignedRoute : null,
-          'blood_group': _selectedBloodGroup,
-          'updated_at': DateTime.now().toIso8601String(),
-        }, onConflict: 'id');
+        });
       }
 
       if (!mounted) return;

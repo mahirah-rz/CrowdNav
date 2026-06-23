@@ -34,11 +34,37 @@ class _DriverPageState extends State<DriverPage> {
   int _currentIndex = 0;
 
   String _selectedRoute = 'Route 1 – Tilagor';
+  String _seatStatus = 'several_seats';
+
   final List<String> _routes = const [
     'Route 1 – Tilagor',
     'Route 2 – Surma Tower',
     'Route 3 – Lakkatura',
     'Route 4 – Tilagor (via Bypass)',
+  ];
+
+  final List<Map<String, dynamic>> _seatStatuses = const [
+    {
+      'value': 'full',
+      'label': 'Bus is full',
+      'subtitle': 'No seat left',
+      'icon': Icons.event_seat_outlined,
+      'color': Colors.redAccent,
+    },
+    {
+      'value': 'several_seats',
+      'label': 'Several seats',
+      'subtitle': 'Seats are available',
+      'icon': Icons.airline_seat_recline_normal,
+      'color': Color(0xFF2ECC71),
+    },
+    {
+      'value': 'almost_empty',
+      'label': 'Almost empty',
+      'subtitle': 'Many seats available',
+      'icon': Icons.directions_bus_filled_outlined,
+      'color': Colors.blueGrey,
+    },
   ];
 
   final MapController _mapController = MapController();
@@ -148,6 +174,7 @@ class _DriverPageState extends State<DriverPage> {
         routeName: _selectedRoute,
         driverName: _driver?.name ?? 'Driver',
         driverPhone: _driver?.phone ?? '',
+        seatStatus: _seatStatus,
         speedKmph: position.speed >= 0 ? position.speed * 3.6 : null,
         heading: position.heading >= 0 ? position.heading : null,
       );
@@ -215,6 +242,22 @@ class _DriverPageState extends State<DriverPage> {
     return '${(diff / 60).floor()}m ago';
   }
 
+
+  Map<String, dynamic> _seatStatusInfo(String status) {
+    return _seatStatuses.firstWhere(
+      (item) => item['value'] == status,
+      orElse: () => _seatStatuses[1],
+    );
+  }
+
+  Future<void> _changeSeatStatus(String status) async {
+    setState(() => _seatStatus = status);
+    final position = _currentPosition;
+    if (_isBroadcasting && position != null) {
+      await _uploadLocation(position);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loadingProfile) {
@@ -280,6 +323,8 @@ class _DriverPageState extends State<DriverPage> {
                 _buildDriverCard(),
                 const SizedBox(height: 22),
                 _buildRouteSelector(),
+                const SizedBox(height: 14),
+                _buildSeatStatusSelector(),
                 if (_errorMessage != null) ...[
                   const SizedBox(height: 16),
                   _buildErrorBox(),
@@ -306,8 +351,8 @@ class _DriverPageState extends State<DriverPage> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       color: _isBroadcasting
-          ? const Color(0xFF2ECC71).withValues(alpha: 0.15)
-          : Colors.grey.withValues(alpha: 0.1),
+          ? const Color(0xFF2ECC71).withValues(alpha:0.15)
+          : Colors.grey.withValues(alpha:0.1),
       child: Row(
         children: [
           Container(
@@ -457,6 +502,89 @@ class _DriverPageState extends State<DriverPage> {
     );
   }
 
+  Widget _buildSeatStatusSelector() {
+    final selectedInfo = _seatStatusInfo(_seatStatus);
+    final selectedColor = selectedInfo['color'] as Color;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.event_seat, color: selectedColor, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Seat Availability Status',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: const Color(0xFF2C3E50)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _isBroadcasting
+                ? 'Users can see this status with your live bus location.'
+                : 'Select the status before starting broadcasting.',
+            style: const TextStyle(fontSize: 12, color: Colors.black54, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 12),
+          ..._seatStatuses.map((item) {
+            final value = item['value'] as String;
+            final label = item['label'] as String;
+            final subtitle = item['subtitle'] as String;
+            final color = item['color'] as Color;
+            final icon = item['icon'] as IconData;
+            final selected = value == _seatStatus;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => _changeSeatStatus(value),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: selected ? color.withValues(alpha: 0.12) : const Color(0xFFECF0F1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: selected ? color : Colors.transparent, width: 1.3),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(icon, color: color, size: 22),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(label, style: GoogleFonts.inter(fontWeight: FontWeight.w800, color: const Color(0xFF2C3E50))),
+                            Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        selected ? Icons.radio_button_checked : Icons.radio_button_off,
+                        color: selected ? color : Colors.grey,
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMapCard() {
     final pos = _currentPosition!;
     return ClipRRect(
@@ -513,9 +641,9 @@ class _DriverPageState extends State<DriverPage> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.redAccent.withValues(alpha: 0.1),
+        color: Colors.redAccent.withOpacity(0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+        border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
       ),
       child: Row(
         children: [
@@ -553,8 +681,8 @@ class _DriverPageState extends State<DriverPage> {
   Widget _buildHint() {
     return Text(
       _isBroadcasting
-          ? 'Keep this page while sharing location.'
-          : 'Choose your route and start broadcasting when the bus starts.',
+          ? 'Keep this page open or keep the app running. Change seat status anytime during the trip.'
+          : 'Choose your route, select seat availability and start broadcasting when the bus trip begins.',
       textAlign: TextAlign.center,
       style: GoogleFonts.inter(color: Colors.black54, fontWeight: FontWeight.w600),
     );

@@ -26,25 +26,25 @@ class SupabaseService {
 
   static String _priority(String? value) {
     switch (_lower(value)) {
-      case 'High':
-        return 'High';
-      case 'Emergency':
-        return 'Emergency';
-      case 'Normal':
+      case 'high':
+        return 'high';
+      case 'emergency':
+        return 'emergency';
+      case 'normal':
       default:
-        return 'Normal';
+        return 'normal';
     }
   }
 
-  static String _complaintPriority(String? value) {
+  static String _seatStatus(String? value) {
     switch (_lower(value)) {
-      case 'High':
-        return 'High';
-      case 'Urgent':
-        return 'Urgent';
-      case 'Normal':
+      case 'full':
+        return 'full';
+      case 'almost_empty':
+        return 'almost_empty';
+      case 'several_seats':
       default:
-        return 'normal';
+        return 'several_seats';
     }
   }
 
@@ -54,7 +54,7 @@ class SupabaseService {
     return a == 'all' || b == 'all' || a == b;
   }
 
-  
+  // ---------------- Profile ----------------
   static Future<Map<String, dynamic>?> getProfileMap() async {
     final userId = currentUserId;
     if (userId == null) return null;
@@ -72,7 +72,7 @@ class SupabaseService {
     return UserModel.fromMap(data);
   }
 
-  
+  // Compatibility alias for pages that call getCurrentProfile().
   static Future<UserModel?> getCurrentProfile() => getProfile();
 
   static Future<bool> isCurrentUserAdmin() async {
@@ -133,7 +133,7 @@ class SupabaseService {
     return uploadAvatarBytes(bytes, name);
   }
 
-  
+  // ---------------- Device token ----------------
   static Future<void> saveDeviceToken({
     required String fcmToken,
     String platform = 'android',
@@ -162,7 +162,7 @@ class SupabaseService {
     }).eq('fcm_token', fcmToken);
   }
 
-  
+  // ---------------- Bus ----------------
   static Future<void> updateBusLocation({
     required String busId,
     required double lat,
@@ -170,6 +170,7 @@ class SupabaseService {
     String routeName = '',
     String driverName = '',
     String driverPhone = '',
+    String seatStatus = 'several_seats',
     double? speedKmph,
     double? heading,
   }) async {
@@ -180,6 +181,7 @@ class SupabaseService {
       'route_name': routeName,
       'driver_name': driverName,
       'driver_phone': driverPhone,
+      'seat_status': _seatStatus(seatStatus),
       'speed_kmph': speedKmph,
       'heading': heading,
       'updated_at': DateTime.now().toIso8601String(),
@@ -214,7 +216,7 @@ class SupabaseService {
         .subscribe();
   }
 
-  
+  // ---------------- Announcements ----------------
   static Future<List<Announcement>> getAnnouncements({
     String role = 'all',
     String department = 'all',
@@ -296,7 +298,9 @@ class SupabaseService {
     if (paths.isNotEmpty) {
       try {
         await _client.storage.from(attachmentsBucket).remove(paths);
-      } catch (_) {}
+      } catch (_) {
+        // Continue deleting the database row even if storage cleanup fails.
+      }
     }
 
     await _client
@@ -369,7 +373,7 @@ class SupabaseService {
         .subscribe();
   }
 
-  
+  // ---------------- Complaints ----------------
   static Future<String> submitComplaint({
     required String category,
     required String subject,
@@ -391,7 +395,7 @@ class SupabaseService {
           'category': category,
           'subject': subject,
           'description': description,
-          'priority': _complaintPriority(priority),
+          'priority': _priority(priority),
           'status': 'pending',
           'created_at': DateTime.now().toIso8601String(),
         })

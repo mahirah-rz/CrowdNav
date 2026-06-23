@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../auth/login_page.dart';
 import '../services/supabase_service.dart';
@@ -20,6 +21,7 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _loading = true;
   bool _editing = false;
   bool _saving = false;
+  bool _uploadingAvatar = false;
 
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
@@ -158,6 +160,49 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   String get _idLabel => 'Student ID';
+
+  Future<void> _changeAvatar() async {
+    if (_profile == null || _uploadingAvatar) return;
+
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 900,
+        imageQuality: 82,
+      );
+      if (picked == null) return;
+
+      if (!mounted) return;
+      setState(() => _uploadingAvatar = true);
+
+      final bytes = await picked.readAsBytes();
+      final publicUrl = await SupabaseService.uploadAvatarBytes(bytes, picked.name);
+      final fresh = await SupabaseService.getProfileMap();
+
+      if (!mounted) return;
+      setState(() {
+        _profile = fresh ?? {...?_profile, 'avatar_url': publicUrl};
+        _uploadingAvatar = false;
+      });
+      widget.onProfileUpdated?.call();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile picture updated.'),
+          backgroundColor: Color(0xFF2ECC71),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _uploadingAvatar = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Avatar upload failed: ${e.toString()}'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
 
   void _enterEditMode() {
     if (_profile != null) _populateControllers(_profile!);
@@ -331,25 +376,33 @@ class _ProfilePageState extends State<ProfilePage> {
           Stack(
             alignment: Alignment.bottomRight,
             children: [
-              CircleAvatar(
-                radius: 38,
-                backgroundColor: Colors.white,
-                backgroundImage: ((_profile?['avatar_url'] ?? '').toString().isNotEmpty)
-                    ? NetworkImage((_profile?['avatar_url'] ?? '').toString())
-                    : null,
-                child: ((_profile?['avatar_url'] ?? '').toString().isEmpty)
-                    ? const Icon(Icons.person, size: 42, color: Color(0xFF123D35))
-                    : null,
-              ),
-              if (!_editing)
-                GestureDetector(
-                  onTap: _enterEditMode,
-                  child: Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: const BoxDecoration(color: Color(0xFF2ECC71), shape: BoxShape.circle),
-                    child: const Icon(Icons.edit, color: Colors.white, size: 15),
-                  ),
+              GestureDetector(
+                onTap: _changeAvatar,
+                child: CircleAvatar(
+                  radius: 38,
+                  backgroundColor: Colors.white,
+                  backgroundImage: ((_profile?['avatar_url'] ?? '').toString().isNotEmpty)
+                      ? NetworkImage((_profile?['avatar_url'] ?? '').toString())
+                      : null,
+                  child: _uploadingAvatar
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF123D35)),
+                        )
+                      : (((_profile?['avatar_url'] ?? '').toString().isEmpty)
+                          ? const Icon(Icons.person, size: 42, color: Color(0xFF123D35))
+                          : null),
                 ),
+              ),
+              GestureDetector(
+                onTap: _changeAvatar,
+                child: Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: const BoxDecoration(color: Color(0xFF2ECC71), shape: BoxShape.circle),
+                  child: Icon(_uploadingAvatar ? Icons.hourglass_empty : Icons.camera_alt, color: Colors.white, size: 15),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -363,7 +416,7 @@ class _ProfilePageState extends State<ProfilePage> {
           const SizedBox(height: 6),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(30)),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.16), borderRadius: BorderRadius.circular(30)),
             child: Text(role, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
           ),
           if (!_editing) ...[
@@ -376,7 +429,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 label: const Text('Edit Profile'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
-                  side: BorderSide(color: Colors.white.withValues(alpha: 0.55)),
+                  side: BorderSide(color: Colors.white.withOpacity(0.55)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
               ),
